@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@tanstack/svelte-table": "^8.21.3",
-    "@tanstack/svelte-virtual": "^3.13.24"
+    "@tanstack/svelte-virtual": "^3.13.24",
+    "shared": "workspace:*"
   }
 }

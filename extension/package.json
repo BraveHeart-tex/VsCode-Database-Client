@@ -27,6 +27,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/pg": "^8.20.0",
     "@types/vscode": "^1.118.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
@@ -36,6 +37,8 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
+    "pg": "^8.20.0",
+    "shared": "workspace:*",
     "vscode-languageclient": "^9.0.1"
   }
 }
