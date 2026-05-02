@@ -1,31 +1,31 @@
-const esbuild = require("esbuild");
+const esbuild = require('esbuild');
 
-const production = process.argv.includes("--production");
-const watch = process.argv.includes("--watch");
+const production = process.argv.includes('--production');
+const watch = process.argv.includes('--watch');
 
 async function main() {
   const ctx = await esbuild.context({
-    entryPoints: ["src/server.ts"],
+    entryPoints: ['src/server.ts'],
     bundle: true,
-    format: "cjs", // must be CJS same as extension host
-    platform: "node",
-    outfile: "dist/server.js",
+    format: 'cjs', // must be CJS same as extension host
+    platform: 'node',
+    outfile: 'dist/server.js',
     external: [
       // exclude native node modules
-      "vscode",
+      'vscode',
     ],
     sourcemap: !production,
     minify: production,
-    logLevel: "info",
+    logLevel: 'info',
   });
 
   if (watch) {
     await ctx.watch();
-    console.log("LSP server watching for changes...");
+    console.log('LSP server watching for changes...');
   } else {
     await ctx.rebuild();
     await ctx.dispose();
-    console.log("LSP server built.");
+    console.log('LSP server built.');
   }
 }
 

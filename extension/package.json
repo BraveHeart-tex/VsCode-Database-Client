@@ -6,9 +6,7 @@
   "engines": {
     "vscode": "^1.113.0"
   },
-  "categories": [
-    "Other"
-  ],
+  "categories": ["Other"],
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
