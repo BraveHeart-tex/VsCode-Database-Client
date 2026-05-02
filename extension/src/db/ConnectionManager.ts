@@ -10,7 +10,6 @@ export class ConnectionManager {
   private connections = new Map<string, ActiveConnection>();
 
   async connect(config: ConnectionConfig): Promise<void> {
-    // If already connected, disconnect first
     if (this.connections.has(config.id)) {
       await this.disconnect(config.id);
     }

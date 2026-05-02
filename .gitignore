@@ -3,3 +3,18 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# macOS
+.DS_Store
+*.pem
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo

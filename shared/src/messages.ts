@@ -3,7 +3,10 @@ export type WebviewToExtensionMessage =
   | { type: 'CONNECT'; payload: ConnectionConfig }
   | { type: 'DISCONNECT'; payload: { connectionId: string } }
   | { type: 'GET_SCHEMA'; payload: { connectionId: string } }
-  | { type: 'CANCEL_QUERY'; payload: { queryId: string } };
+  | { type: 'CANCEL_QUERY'; payload: { queryId: string } }
+  | { type: 'SAVE_CONNECTION'; payload: ConnectionConfig }
+  | { type: 'DELETE_CONNECTION'; payload: { connectionId: string } }
+  | { type: 'GET_CONNECTIONS'; payload: Record<string, never> };
 
 export type ExtensionToWebviewMessage =
   | { type: 'QUERY_RESULT'; payload: QueryResult }
@@ -17,7 +20,11 @@ export type ExtensionToWebviewMessage =
       payload: { connectionId: string; schema: DbSchema };
     }
   | { type: 'CONNECTION_SUCCESS'; payload: { connectionId: string } }
-  | { type: 'CONNECTION_ERROR'; payload: { message: string } };
+  | { type: 'CONNECTION_ERROR'; payload: { message: string } }
+  | { type: 'CONNECTIONS_LIST'; payload: { connections: ConnectionConfig[] } }
+  | { type: 'CONNECTION_SAVED'; payload: { connectionId: string } }
+  | { type: 'CONNECTION_DELETED'; payload: { connectionId: string } }
+  | { type: 'CONNECTION_TESTING'; payload: { connectionId: string } };
 
 // Shared types
 export interface ConnectionConfig {
@@ -28,7 +35,7 @@ export interface ConnectionConfig {
   username: string;
   password: string;
   ssl: boolean;
-  name: string; // display label
+  name: string;
 }
 
 export type Row = Record<string, unknown>;
@@ -38,7 +45,7 @@ export interface QueryResult {
   rows: Row[];
   columns: Column[];
   rowCount: number;
-  duration: number; // ms
+  duration: number;
 }
 
 export interface Column {
