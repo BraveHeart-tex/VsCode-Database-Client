@@ -102,7 +102,7 @@
 
   function connect(connection: ConnectionConfig) {
     feedback = null;
-    bridgeClient.send({ type: 'CONNECT', payload: connection });
+    bridgeClient.send({ type: 'CONNECT', payload: toConnectionConfig(connection) });
   }
 
   function deleteConnection(connectionId: string) {
@@ -120,6 +120,19 @@
       username: form.username.trim(),
       password: form.password,
       ssl: form.ssl,
+    };
+  }
+
+  function toConnectionConfig(connection: ConnectionConfig): ConnectionConfig {
+    return {
+      id: connection.id,
+      name: connection.name,
+      host: connection.host,
+      port: Number(connection.port),
+      database: connection.database,
+      username: connection.username,
+      password: connection.password,
+      ssl: connection.ssl,
     };
   }
 

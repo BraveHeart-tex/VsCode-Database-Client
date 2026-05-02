@@ -1,9 +1,7 @@
 <script lang="ts">
   import type {
     Cell,
-    ColumnDef,
     Header,
-    TableOptions,
     TableOptionsResolved,
   } from '@tanstack/table-core';
   import {
@@ -13,7 +11,8 @@
   } from '@tanstack/table-core';
   import { createVirtualizer } from '@tanstack/svelte-virtual';
   import type { Column, ExtensionToWebviewMessage, Row } from 'shared';
-  import { getContext } from 'svelte';
+  import { getContext, untrack } from 'svelte';
+  import { get } from 'svelte/store';
   import {
     BRIDGE_CONTEXT_KEY,
     type WebviewBridge,
@@ -25,16 +24,8 @@
   >['payload'];
 
   const {
-    rows = [],
-    columns = [],
-    rowCount,
-    duration,
     loading = false,
   } = $props<{
-    rows?: Row[];
-    columns?: Column[];
-    rowCount?: number;
-    duration?: number;
     loading?: boolean;
   }>();
 
@@ -57,25 +48,29 @@
     overscan: 8,
   });
 
-  const table = $derived(createTable(createTableOptions(currentRows, currentColumns)));
+  const table = $derived(
+    createTable(createTableOptions(currentRows, currentColumns))
+  );
+
+  const tableRows = $derived(table.getRowModel().rows);
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
-  const tableRows = $derived(table.getRowModel().rows);
 
   $effect(() => {
-    currentRows = rows;
-    currentColumns = columns;
-    currentRowCount = rowCount ?? rows.length;
-    currentDuration = duration ?? 0;
     isLoading = loading;
-
-    if (rows.length > 0 || columns.length > 0) {
-      hasRunQuery = true;
-    }
   });
 
   $effect(() => {
-    $virtualizer.setOptions({ count: currentRows.length });
+    const count = currentRows.length;
+
+    untrack(() => {
+      get(virtualizer).setOptions({
+        count,
+        getScrollElement: () => scrollElement,
+        estimateSize: () => 32,
+        overscan: 8,
+      });
+    });
   });
 
   $effect(() => {
@@ -88,6 +83,7 @@
       hasRunQuery = true;
       errorMessage = null;
     });
+
     const offError = bridge.on(
       'QUERY_ERROR',
       ({ message }: QueryErrorPayload) => {
@@ -119,7 +115,12 @@
       getCoreRowModel: getCoreRowModel(),
       onStateChange: () => {},
       renderFallbackValue: null,
-      state: {},
+      state: {
+        columnPinning: {
+          left: [],
+          right: [],
+        },
+      },
     };
   }
 
@@ -151,11 +152,14 @@
   function renderCell(cell: Cell<Row, unknown>) {
     return formatCellValue(cell.getValue());
   }
+
+  $inspect(currentRows);
 </script>
 
 <section class="results-grid" aria-labelledby="results-grid-title">
   <header class="toolbar">
     <h2 id="results-grid-title">Results</h2>
+
     {#if hasRunQuery && !isLoading && !errorMessage}
       <span>{currentRowCount} rows in {currentDuration} ms</span>
     {/if}
@@ -174,12 +178,16 @@
     <div class="state">Query returned no rows.</div>
   {:else}
     <div class="table-wrap" bind:this={scrollElement}>
-      <div class="table" style:width={`${Math.max(currentColumns.length, 1) * 180}px`}>
+      <div
+        class="table"
+        style:width={`${Math.max(currentColumns.length, 1) * 180}px`}
+      >
         <div class="thead">
           {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
             <div class="tr">
               {#each headerGroup.headers as header (header.id)}
                 {@const column = headerColumn(header)}
+
                 <div class="th">
                   <strong>{column.name}</strong>
                   <span>{column.dataType}</span>
@@ -192,6 +200,7 @@
         <div class="tbody" style:height={`${totalSize}px`}>
           {#each virtualRows as virtualRow (virtualRow.key)}
             {@const row = tableRows[virtualRow.index]}
+
             {#if row}
               <div
                 class="tr virtual-row"

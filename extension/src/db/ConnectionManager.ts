@@ -82,7 +82,6 @@ export class ConnectionManager {
     await Promise.all(ids.map((id) => this.disconnect(id)));
   }
 
-  // Basic OID → type name mapping for common Postgres types
   private resolveDataType(oid: number): string {
     const types: Record<number, string> = {
       16: 'boolean',
