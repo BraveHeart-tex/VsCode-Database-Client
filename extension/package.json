@@ -1,0 +1,41 @@
+{
+  "name": "db-client",
+  "displayName": "db-client",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.113.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "db-client.helloWorld",
+        "title": "Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "dev": "node esbuild.js --watch",
+    "build": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.118.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

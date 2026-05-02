@@ -1,1 +1,4 @@
-packages: ["extension", "webview-ui", "lsp-server"]
+packages:
+  - 'extension'
+  - 'webview-ui'
+  - 'lsp-server'
