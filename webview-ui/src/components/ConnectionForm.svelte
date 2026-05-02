@@ -1,145 +1,145 @@
 <script lang="ts">
-  import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
-  import { getContext, onMount } from 'svelte';
-  import {
-    BRIDGE_CONTEXT_KEY,
-    type WebviewBridge,
-  } from '../lib/bridge';
+import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
+import { getContext, onMount } from 'svelte';
+import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
 
-  type Feedback = {
-    kind: 'success' | 'error';
-    message: string;
-  } | null;
-  type Payload<T extends ExtensionToWebviewMessage['type']> = Extract<
-    ExtensionToWebviewMessage,
-    { type: T }
-  >['payload'];
+type Feedback = {
+  kind: 'success' | 'error';
+  message: string;
+} | null;
+type Payload<T extends ExtensionToWebviewMessage['type']> = Extract<
+  ExtensionToWebviewMessage,
+  { type: T }
+>['payload'];
 
-  const bridgeClient = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
+const bridgeClient = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
 
-  let form = $state({
-    name: '',
-    host: '',
-    port: 5432,
-    database: '',
-    username: '',
-    password: '',
-    ssl: false,
-  });
-  let connections = $state<ConnectionConfig[]>([]);
-  let testingConnectionId = $state<string | null>(null);
-  let feedback = $state<Feedback>(null);
+let form = $state({
+  name: '',
+  host: '',
+  port: 5432,
+  database: '',
+  username: '',
+  password: '',
+  ssl: false,
+});
+let connections = $state<ConnectionConfig[]>([]);
+let testingConnectionId = $state<string | null>(null);
+let feedback = $state<Feedback>(null);
 
-  const isTesting = $derived(testingConnectionId !== null);
+const isTesting = $derived(testingConnectionId !== null);
 
-  onMount(() => {
-    const offList = bridgeClient.on(
-      'CONNECTIONS_LIST',
-      ({ connections: next }: Payload<'CONNECTIONS_LIST'>) => {
-        connections = next;
-      }
-    );
-    const offTesting = bridgeClient.on(
-      'CONNECTION_TESTING',
-      ({ connectionId }: Payload<'CONNECTION_TESTING'>) => {
-        testingConnectionId = connectionId;
-        feedback = null;
-      }
-    );
-    const offSuccess = bridgeClient.on(
-      'CONNECTION_SUCCESS',
-      ({ connectionId }: Payload<'CONNECTION_SUCCESS'>) => {
-        testingConnectionId = null;
-        feedback = {
-          kind: 'success',
-          message: `Connected to ${getConnectionLabel(connectionId)}.`,
-        };
-        bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
-      }
-    );
-    const offSaved = bridgeClient.on('CONNECTION_SAVED', () => {
+onMount(() => {
+  const offList = bridgeClient.on(
+    'CONNECTIONS_LIST',
+    ({ connections: next }: Payload<'CONNECTIONS_LIST'>) => {
+      connections = next;
+    }
+  );
+  const offTesting = bridgeClient.on(
+    'CONNECTION_TESTING',
+    ({ connectionId }: Payload<'CONNECTION_TESTING'>) => {
+      testingConnectionId = connectionId;
+      feedback = null;
+    }
+  );
+  const offSuccess = bridgeClient.on(
+    'CONNECTION_SUCCESS',
+    ({ connectionId }: Payload<'CONNECTION_SUCCESS'>) => {
+      testingConnectionId = null;
+      feedback = {
+        kind: 'success',
+        message: `Connected to ${getConnectionLabel(connectionId)}.`,
+      };
       bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
-    });
-    const offError = bridgeClient.on(
-      'CONNECTION_ERROR',
-      ({ message }: Payload<'CONNECTION_ERROR'>) => {
-        testingConnectionId = null;
-        feedback = { kind: 'error', message };
-      }
-    );
-    const offDeleted = bridgeClient.on(
-      'CONNECTION_DELETED',
-      ({ connectionId }: Payload<'CONNECTION_DELETED'>) => {
-        connections = connections.filter(
-          (connection) => connection.id !== connectionId
-        );
-        if (testingConnectionId === connectionId) {
-          testingConnectionId = null;
-        }
-        feedback = { kind: 'success', message: 'Connection deleted.' };
-      }
-    );
-
+    }
+  );
+  const offSaved = bridgeClient.on('CONNECTION_SAVED', () => {
     bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
-
-    return () => {
-      offList();
-      offTesting();
-      offSuccess();
-      offSaved();
-      offError();
-      offDeleted();
-    };
   });
+  const offError = bridgeClient.on(
+    'CONNECTION_ERROR',
+    ({ message }: Payload<'CONNECTION_ERROR'>) => {
+      testingConnectionId = null;
+      feedback = { kind: 'error', message };
+    }
+  );
+  const offDeleted = bridgeClient.on(
+    'CONNECTION_DELETED',
+    ({ connectionId }: Payload<'CONNECTION_DELETED'>) => {
+      connections = connections.filter(
+        (connection) => connection.id !== connectionId
+      );
+      if (testingConnectionId === connectionId) {
+        testingConnectionId = null;
+      }
+      feedback = { kind: 'success', message: 'Connection deleted.' };
+    }
+  );
 
-  function submitConnection() {
-    const config = createConnectionConfig();
+  bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
 
-    feedback = null;
-    bridgeClient.send({ type: 'SAVE_CONNECTION', payload: config });
-    bridgeClient.send({ type: 'CONNECT', payload: config });
-  }
+  return () => {
+    offList();
+    offTesting();
+    offSuccess();
+    offSaved();
+    offError();
+    offDeleted();
+  };
+});
 
-  function connect(connection: ConnectionConfig) {
-    feedback = null;
-    bridgeClient.send({ type: 'CONNECT', payload: toConnectionConfig(connection) });
-  }
+function submitConnection() {
+  const config = createConnectionConfig();
 
-  function deleteConnection(connectionId: string) {
-    feedback = null;
-    bridgeClient.send({ type: 'DELETE_CONNECTION', payload: { connectionId } });
-  }
+  feedback = null;
+  bridgeClient.send({ type: 'SAVE_CONNECTION', payload: config });
+  bridgeClient.send({ type: 'CONNECT', payload: config });
+}
 
-  function createConnectionConfig(): ConnectionConfig {
-    return {
-      id: crypto.randomUUID(),
-      name: form.name.trim(),
-      host: form.host.trim(),
-      port: Number(form.port),
-      database: form.database.trim(),
-      username: form.username.trim(),
-      password: form.password,
-      ssl: form.ssl,
-    };
-  }
+function connect(connection: ConnectionConfig) {
+  feedback = null;
+  bridgeClient.send({
+    type: 'CONNECT',
+    payload: toConnectionConfig(connection),
+  });
+}
 
-  function toConnectionConfig(connection: ConnectionConfig): ConnectionConfig {
-    return {
-      id: connection.id,
-      name: connection.name,
-      host: connection.host,
-      port: Number(connection.port),
-      database: connection.database,
-      username: connection.username,
-      password: connection.password,
-      ssl: connection.ssl,
-    };
-  }
+function deleteConnection(connectionId: string) {
+  feedback = null;
+  bridgeClient.send({ type: 'DELETE_CONNECTION', payload: { connectionId } });
+}
 
-  function getConnectionLabel(connectionId: string) {
-    const connection = connections.find(({ id }) => id === connectionId);
-    return connection?.name || form.name || connectionId;
-  }
+function createConnectionConfig(): ConnectionConfig {
+  return {
+    id: crypto.randomUUID(),
+    name: form.name.trim(),
+    host: form.host.trim(),
+    port: Number(form.port),
+    database: form.database.trim(),
+    username: form.username.trim(),
+    password: form.password,
+    ssl: form.ssl,
+  };
+}
+
+function toConnectionConfig(connection: ConnectionConfig): ConnectionConfig {
+  return {
+    id: connection.id,
+    name: connection.name,
+    host: connection.host,
+    port: Number(connection.port),
+    database: connection.database,
+    username: connection.username,
+    password: connection.password,
+    ssl: connection.ssl,
+  };
+}
+
+function getConnectionLabel(connectionId: string) {
+  const connection = connections.find(({ id }) => id === connectionId);
+  return connection?.name || form.name || connectionId;
+}
 </script>
 
 <section class="connection-form" aria-labelledby="connection-form-title">

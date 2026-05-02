@@ -1,159 +1,150 @@
 <script lang="ts">
-  import type {
-    Cell,
-    Header,
-    TableOptionsResolved,
-  } from '@tanstack/table-core';
-  import {
-    createColumnHelper,
-    createTable,
-    getCoreRowModel,
-  } from '@tanstack/table-core';
-  import { createVirtualizer } from '@tanstack/svelte-virtual';
-  import type { Column, ExtensionToWebviewMessage, Row } from 'shared';
-  import { getContext, untrack } from 'svelte';
-  import { get } from 'svelte/store';
-  import {
-    BRIDGE_CONTEXT_KEY,
-    type WebviewBridge,
-  } from '../lib/bridge';
+import type { Cell, Header, TableOptionsResolved } from '@tanstack/table-core';
+import {
+  createColumnHelper,
+  createTable,
+  getCoreRowModel,
+} from '@tanstack/table-core';
+import { createVirtualizer } from '@tanstack/svelte-virtual';
+import type { Column, ExtensionToWebviewMessage, Row } from 'shared';
+import { getContext, untrack } from 'svelte';
+import { get } from 'svelte/store';
+import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
 
-  type QueryErrorPayload = Extract<
-    ExtensionToWebviewMessage,
-    { type: 'QUERY_ERROR' }
-  >['payload'];
+type QueryErrorPayload = Extract<
+  ExtensionToWebviewMessage,
+  { type: 'QUERY_ERROR' }
+>['payload'];
 
-  const {
-    loading = false,
-  } = $props<{
-    loading?: boolean;
-  }>();
+const { loading = false } = $props<{
+  loading?: boolean;
+}>();
 
-  const bridge = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
-  const columnHelper = createColumnHelper<Row>();
+const bridge = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
+const columnHelper = createColumnHelper<Row>();
 
-  let currentRows = $state<Row[]>([]);
-  let currentColumns = $state<Column[]>([]);
-  let currentRowCount = $state(0);
-  let currentDuration = $state(0);
-  let isLoading = $state(false);
-  let hasRunQuery = $state(false);
-  let errorMessage = $state<string | null>(null);
-  let scrollElement = $state<HTMLDivElement | null>(null);
+let currentRows = $state<Row[]>([]);
+let currentColumns = $state<Column[]>([]);
+let currentRowCount = $state(0);
+let currentDuration = $state(0);
+let isLoading = $state(false);
+let hasRunQuery = $state(false);
+let errorMessage = $state<string | null>(null);
+let scrollElement = $state<HTMLDivElement | null>(null);
 
-  const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: 0,
-    getScrollElement: () => scrollElement,
-    estimateSize: () => 32,
-    overscan: 8,
-  });
+const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+  count: 0,
+  getScrollElement: () => scrollElement,
+  estimateSize: () => 32,
+  overscan: 8,
+});
 
-  const table = $derived(
-    createTable(createTableOptions(currentRows, currentColumns))
-  );
+const table = $derived(
+  createTable(createTableOptions(currentRows, currentColumns))
+);
 
-  const tableRows = $derived(table.getRowModel().rows);
-  const virtualRows = $derived($virtualizer.getVirtualItems());
-  const totalSize = $derived($virtualizer.getTotalSize());
+const tableRows = $derived(table.getRowModel().rows);
+const virtualRows = $derived($virtualizer.getVirtualItems());
+const totalSize = $derived($virtualizer.getTotalSize());
 
-  $effect(() => {
-    isLoading = loading;
-  });
+$effect(() => {
+  isLoading = loading;
+});
 
-  $effect(() => {
-    const count = currentRows.length;
+$effect(() => {
+  const count = currentRows.length;
 
-    untrack(() => {
-      get(virtualizer).setOptions({
-        count,
-        getScrollElement: () => scrollElement,
-        estimateSize: () => 32,
-        overscan: 8,
-      });
+  untrack(() => {
+    get(virtualizer).setOptions({
+      count,
+      getScrollElement: () => scrollElement,
+      estimateSize: () => 32,
+      overscan: 8,
     });
   });
+});
 
-  $effect(() => {
-    const offResult = bridge.on('QUERY_RESULT', (result) => {
-      currentRows = result.rows;
-      currentColumns = result.columns;
-      currentRowCount = result.rowCount;
-      currentDuration = result.duration;
+$effect(() => {
+  const offResult = bridge.on('QUERY_RESULT', (result) => {
+    currentRows = result.rows;
+    currentColumns = result.columns;
+    currentRowCount = result.rowCount;
+    currentDuration = result.duration;
+    isLoading = false;
+    hasRunQuery = true;
+    errorMessage = null;
+  });
+
+  const offError = bridge.on(
+    'QUERY_ERROR',
+    ({ message }: QueryErrorPayload) => {
       isLoading = false;
       hasRunQuery = true;
-      errorMessage = null;
-    });
+      errorMessage = message;
+    }
+  );
 
-    const offError = bridge.on(
-      'QUERY_ERROR',
-      ({ message }: QueryErrorPayload) => {
-        isLoading = false;
-        hasRunQuery = true;
-        errorMessage = message;
-      }
-    );
+  return () => {
+    offResult();
+    offError();
+  };
+});
 
-    return () => {
-      offResult();
-      offError();
-    };
-  });
-
-  function createTableOptions(
-    data: Row[],
-    resultColumns: Column[]
-  ): TableOptionsResolved<Row> {
-    return {
-      data,
-      columns: resultColumns.map((column) =>
-        columnHelper.accessor((row) => row[column.name], {
-          id: column.name,
-          header: () => column,
-          cell: (info) => formatCellValue(info.getValue()),
-        })
-      ),
-      getCoreRowModel: getCoreRowModel(),
-      onStateChange: () => {},
-      renderFallbackValue: null,
-      state: {
-        columnPinning: {
-          left: [],
-          right: [],
-        },
+function createTableOptions(
+  data: Row[],
+  resultColumns: Column[]
+): TableOptionsResolved<Row> {
+  return {
+    data,
+    columns: resultColumns.map((column) =>
+      columnHelper.accessor((row) => row[column.name], {
+        id: column.name,
+        header: () => column,
+        cell: (info) => formatCellValue(info.getValue()),
+      })
+    ),
+    getCoreRowModel: getCoreRowModel(),
+    onStateChange: () => {},
+    renderFallbackValue: null,
+    state: {
+      columnPinning: {
+        left: [],
+        right: [],
       },
-    };
+    },
+  };
+}
+
+function formatCellValue(value: unknown) {
+  if (value === null) {
+    return 'NULL';
   }
 
-  function formatCellValue(value: unknown) {
-    if (value === null) {
-      return 'NULL';
+  if (value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function headerColumn(header: Header<Row, unknown>) {
+  return (
+    currentColumns.find((column) => column.name === header.id) ?? {
+      name: header.id,
+      dataType: 'unknown',
     }
+  );
+}
 
-    if (value === undefined) {
-      return '';
-    }
+function renderCell(cell: Cell<Row, unknown>) {
+  return formatCellValue(cell.getValue());
+}
 
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-
-    return String(value);
-  }
-
-  function headerColumn(header: Header<Row, unknown>) {
-    return (
-      currentColumns.find((column) => column.name === header.id) ?? {
-        name: header.id,
-        dataType: 'unknown',
-      }
-    );
-  }
-
-  function renderCell(cell: Cell<Row, unknown>) {
-    return formatCellValue(cell.getValue());
-  }
-
-  $inspect(currentRows);
+$inspect(currentRows);
 </script>
 
 <section class="results-grid" aria-labelledby="results-grid-title">

@@ -4,42 +4,16 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "*.json",
-      "*.jsonc",
-      "*.js",
-      "*.cjs",
-      "*.mjs",
-      "*.ts",
-      "extension/*.json",
-      "extension/*.jsonc",
-      "extension/*.js",
-      "extension/*.cjs",
-      "extension/*.mjs",
-      "extension/*.ts",
-      "extension/src/**/*.ts",
-      "lsp-server/*.json",
-      "lsp-server/*.jsonc",
-      "lsp-server/*.js",
-      "lsp-server/*.cjs",
-      "lsp-server/*.mjs",
-      "lsp-server/*.ts",
-      "lsp-server/src/**/*.ts",
-      "shared/*.json",
-      "shared/*.jsonc",
-      "shared/*.js",
-      "shared/*.cjs",
-      "shared/*.mjs",
-      "shared/*.ts",
-      "shared/src/**/*.ts",
-      "webview-ui/*.json",
-      "webview-ui/*.jsonc",
-      "webview-ui/*.js",
-      "webview-ui/*.cjs",
-      "webview-ui/*.mjs",
-      "webview-ui/*.ts",
+      "*.{json,jsonc,js,cjs,mjs,ts}",
+
+      "extension/**/*.{json,jsonc,js,cjs,mjs,ts}",
+      "lsp-server/**/*.{json,jsonc,js,cjs,mjs,ts}",
+      "shared/**/*.{json,jsonc,js,cjs,mjs,ts}",
+      "webview-ui/**/*.{json,jsonc,js,cjs,mjs,ts,svelte}",
+
       "!!**/node_modules",
       "!!**/dist",
-      "!**/*.svelte"
+      "!!**/build"
     ]
   },
   "linter": {
@@ -66,6 +40,23 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["webview-ui/*.svelte"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useConst": "off",
+            "useImportType": "off"
+          },
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "off"
+          }
+        }
+      }
+    }
+  ],
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,

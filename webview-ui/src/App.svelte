@@ -1,41 +1,40 @@
 <script lang="ts">
-  import { setContext } from 'svelte';
-  import { onMount } from 'svelte';
-  import ConnectionForm from './components/ConnectionForm.svelte';
-  import QueryView from './components/QueryView.svelte';
-  import {
-    BRIDGE_CONTEXT_KEY,
-    getWebviewBridge,
-  } from './lib/bridge';
+import { setContext } from 'svelte';
+import { onMount } from 'svelte';
+import ConnectionForm from './components/ConnectionForm.svelte';
+import QueryView from './components/QueryView.svelte';
+import { BRIDGE_CONTEXT_KEY, getWebviewBridge } from './lib/bridge';
 
-  type View = 'connections' | 'query';
+type View = 'connections' | 'query';
 
-  const bridge = getWebviewBridge();
-  setContext(BRIDGE_CONTEXT_KEY, bridge);
+const bridge = getWebviewBridge();
+setContext(BRIDGE_CONTEXT_KEY, bridge);
 
-  let view = $state<View>('connections');
-  let activeConnectionIds = $state<string[]>([]);
+let view = $state<View>('connections');
+let activeConnectionIds = $state<string[]>([]);
 
-  const tabs: { id: View; label: string }[] = [
-    { id: 'connections', label: 'Connections' },
-    { id: 'query', label: 'Query' },
-  ];
+const tabs: { id: View; label: string }[] = [
+  { id: 'connections', label: 'Connections' },
+  { id: 'query', label: 'Query' },
+];
 
-  onMount(() => {
-    const offSuccess = bridge.on('CONNECTION_SUCCESS', ({ connectionId }) => {
-      if (!activeConnectionIds.includes(connectionId)) {
-        activeConnectionIds = [...activeConnectionIds, connectionId];
-      }
-    });
-    const offDeleted = bridge.on('CONNECTION_DELETED', ({ connectionId }) => {
-      activeConnectionIds = activeConnectionIds.filter((id) => id !== connectionId);
-    });
-
-    return () => {
-      offSuccess();
-      offDeleted();
-    };
+onMount(() => {
+  const offSuccess = bridge.on('CONNECTION_SUCCESS', ({ connectionId }) => {
+    if (!activeConnectionIds.includes(connectionId)) {
+      activeConnectionIds = [...activeConnectionIds, connectionId];
+    }
   });
+  const offDeleted = bridge.on('CONNECTION_DELETED', ({ connectionId }) => {
+    activeConnectionIds = activeConnectionIds.filter(
+      (id) => id !== connectionId
+    );
+  });
+
+  return () => {
+    offSuccess();
+    offDeleted();
+  };
+});
 </script>
 
 <main class="app-shell">

@@ -1,109 +1,105 @@
 <script lang="ts">
-  import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
-  import { getContext, onMount } from 'svelte';
-  import {
-    BRIDGE_CONTEXT_KEY,
-    type WebviewBridge,
-  } from '../lib/bridge';
-  import ResultsGrid from './ResultsGrid.svelte';
+import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
+import { getContext, onMount } from 'svelte';
+import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
+import ResultsGrid from './ResultsGrid.svelte';
 
-  type ConnectionsListPayload = Extract<
-    ExtensionToWebviewMessage,
-    { type: 'CONNECTIONS_LIST' }
-  >['payload'];
+type ConnectionsListPayload = Extract<
+  ExtensionToWebviewMessage,
+  { type: 'CONNECTIONS_LIST' }
+>['payload'];
 
-  const {
-    activeConnectionIds,
-    onOpenConnections,
-  } = $props<{
-    activeConnectionIds: string[];
-    onOpenConnections: () => void;
-  }>();
+const { activeConnectionIds, onOpenConnections } = $props<{
+  activeConnectionIds: string[];
+  onOpenConnections: () => void;
+}>();
 
-  const bridge = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
+const bridge = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
 
-  let sql = $state('');
-  let selectedConnectionId = $state('');
-  let connections = $state<ConnectionConfig[]>([]);
-  let isRunning = $state(false);
-  let formError = $state<string | null>(null);
+let sql = $state('');
+let selectedConnectionId = $state('');
+let connections = $state<ConnectionConfig[]>([]);
+let isRunning = $state(false);
+let formError = $state<string | null>(null);
 
-  const canRun = $derived(
-    sql.trim().length > 0 && selectedConnectionId.length > 0 && !isRunning
+const canRun = $derived(
+  sql.trim().length > 0 && selectedConnectionId.length > 0 && !isRunning
+);
+
+const activeConnections = $derived(
+  connections.filter((connection) =>
+    activeConnectionIds.includes(connection.id)
+  )
+);
+
+onMount(() => {
+  const offConnections = bridge.on(
+    'CONNECTIONS_LIST',
+    ({ connections: nextConnections }: ConnectionsListPayload) => {
+      connections = nextConnections;
+    }
   );
-
-  const activeConnections = $derived(
-    connections.filter((connection) => activeConnectionIds.includes(connection.id))
-  );
-
-  onMount(() => {
-    const offConnections = bridge.on(
-      'CONNECTIONS_LIST',
-      ({ connections: nextConnections }: ConnectionsListPayload) => {
-        connections = nextConnections;
-      }
-    );
-    const offResult = bridge.on('QUERY_RESULT', () => {
-      isRunning = false;
-    });
-    const offError = bridge.on('QUERY_ERROR', () => {
-      isRunning = false;
-    });
-
-    bridge.send({ type: 'GET_CONNECTIONS', payload: {} });
-
-    return () => {
-      offConnections();
-      offResult();
-      offError();
-    };
+  const offResult = bridge.on('QUERY_RESULT', () => {
+    isRunning = false;
+  });
+  const offError = bridge.on('QUERY_ERROR', () => {
+    isRunning = false;
   });
 
-  $effect(() => {
-    if (
-      activeConnections.length > 0 &&
-      !activeConnections.some(({ id }) => id === selectedConnectionId)
-    ) {
-      selectedConnectionId = activeConnections[0].id;
-    }
+  bridge.send({ type: 'GET_CONNECTIONS', payload: {} });
 
-    if (activeConnections.length === 0) {
-      selectedConnectionId = '';
-      isRunning = false;
-    }
+  return () => {
+    offConnections();
+    offResult();
+    offError();
+  };
+});
+
+$effect(() => {
+  if (
+    activeConnections.length > 0 &&
+    !activeConnections.some(({ id }) => id === selectedConnectionId)
+  ) {
+    selectedConnectionId = activeConnections[0].id;
+  }
+
+  if (activeConnections.length === 0) {
+    selectedConnectionId = '';
+    isRunning = false;
+  }
+});
+
+function runQuery() {
+  const query = sql.trim();
+
+  if (!selectedConnectionId) {
+    formError = 'Select a connection before running a query.';
+    return;
+  }
+
+  if (!query) {
+    formError = 'Enter SQL before running a query.';
+    return;
+  }
+
+  formError = null;
+  isRunning = true;
+  bridge.send({
+    type: 'EXECUTE_QUERY',
+    payload: { sql: query, connectionId: selectedConnectionId },
   });
+}
 
-  function runQuery() {
-    const query = sql.trim();
-
-    if (!selectedConnectionId) {
-      formError = 'Select a connection before running a query.';
-      return;
-    }
-
-    if (!query) {
-      formError = 'Enter SQL before running a query.';
-      return;
-    }
-
-    formError = null;
-    isRunning = true;
-    bridge.send({
-      type: 'EXECUTE_QUERY',
-      payload: { sql: query, connectionId: selectedConnectionId },
-    });
+function handleEditorKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
+    return;
   }
 
-  function handleEditorKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
-      return;
-    }
-
-    event.preventDefault();
-    if (canRun) {
-      runQuery();
-    }
+  event.preventDefault();
+  if (canRun) {
+    runQuery();
   }
+}
 </script>
 
 <section class="query-view" aria-labelledby="query-view-title">
