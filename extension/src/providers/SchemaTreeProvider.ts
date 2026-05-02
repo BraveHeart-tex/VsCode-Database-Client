@@ -11,7 +11,20 @@ WHERE table_type = 'BASE TABLE'
 ORDER BY table_schema, table_name
 `;
 
-type TreeNode = ConnectionNode | SchemaNode | TableNode | MessageNode;
+type TreeNode =
+  | ConnectionNode
+  | SchemaNode
+  | TableNode
+  | ColumnNode
+  | MessageNode;
+
+interface ColumnMetadata {
+  name: string;
+  dataType: string;
+  isNullable: boolean;
+  defaultValue: string | null;
+  ordinalPosition: number;
+}
 
 interface ConnectionNode {
   kind: 'connection';
@@ -30,6 +43,14 @@ interface TableNode {
   connectionId: string;
   schema: string;
   table: string;
+}
+
+interface ColumnNode {
+  kind: 'column';
+  connectionId: string;
+  schema: string;
+  table: string;
+  column: ColumnMetadata;
 }
 
 interface MessageNode {
@@ -62,7 +83,7 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         );
         item.description = `${element.connection.host}:${element.connection.port}/${element.connection.database}`;
         item.tooltip = `${element.connection.name}\n${item.description}`;
-        item.contextValue = 'db-client.connection';
+        item.contextValue = 'dbClient.connection';
         item.iconPath = new vscode.ThemeIcon('database');
         return item;
       }
@@ -72,18 +93,29 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
           vscode.TreeItemCollapsibleState.Collapsed
         );
         item.description = `${element.tables.length} tables`;
-        item.contextValue = 'db-client.schema';
+        item.contextValue = 'dbClient.schema';
         item.iconPath = vscode.ThemeIcon.Folder;
         return item;
       }
       case 'table': {
         const item = new vscode.TreeItem(
           element.table,
-          vscode.TreeItemCollapsibleState.None
+          vscode.TreeItemCollapsibleState.Collapsed
         );
         item.description = element.schema;
-        item.contextValue = 'db-client.table';
+        item.contextValue = 'dbClient.table';
         item.iconPath = new vscode.ThemeIcon('table');
+        return item;
+      }
+      case 'column': {
+        const item = new vscode.TreeItem(
+          this.formatColumnLabel(element.column),
+          vscode.TreeItemCollapsibleState.None
+        );
+        item.description = this.formatColumnDescription(element.column);
+        item.tooltip = this.formatColumnTooltip(element);
+        item.contextValue = 'dbClient.column';
+        item.iconPath = new vscode.ThemeIcon('symbol-field');
         return item;
       }
       case 'message':
@@ -114,6 +146,10 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         schema: element.schema,
         table,
       }));
+    }
+
+    if (element.kind === 'table') {
+      return this.getColumnChildren(element);
     }
 
     return [];
@@ -172,8 +208,111 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     await this.connectionManager.connect(connection);
   }
 
+  private async getColumnChildren(table: TableNode): Promise<TreeNode[]> {
+    try {
+      const result = await this.connectionManager.query(
+        table.connectionId,
+        this.createLoadColumnsSql(table.schema, table.table)
+      );
+
+      return result.rows
+        .map((row) => this.readColumnMetadata(row))
+        .filter((column): column is ColumnMetadata => column !== undefined)
+        .map((column) => ({
+          kind: 'column',
+          connectionId: table.connectionId,
+          schema: table.schema,
+          table: table.table,
+          column,
+        }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(
+        `Failed to load columns for ${table.schema}.${table.table}: ${message}`
+      );
+      return [];
+    }
+  }
+
+  private createLoadColumnsSql(schema: string, table: string): string {
+    return `
+SELECT column_name, data_type, is_nullable, column_default, ordinal_position
+FROM information_schema.columns
+WHERE table_schema = '${this.escapeSqlLiteral(schema)}'
+  AND table_name = '${this.escapeSqlLiteral(table)}'
+ORDER BY ordinal_position
+`;
+  }
+
+  private escapeSqlLiteral(value: string): string {
+    return value.replaceAll("'", "''");
+  }
+
+  private readColumnMetadata(row: Row): ColumnMetadata | undefined {
+    const name = this.readString(row, 'column_name');
+    const dataType = this.readString(row, 'data_type');
+    const isNullable = this.readString(row, 'is_nullable');
+    const defaultValue = this.readNullableString(row, 'column_default');
+    const ordinalPosition = this.readNumber(row, 'ordinal_position');
+
+    if (!name || !dataType || !isNullable || ordinalPosition === undefined) {
+      return undefined;
+    }
+
+    return {
+      name,
+      dataType,
+      isNullable: isNullable === 'YES',
+      defaultValue,
+      ordinalPosition,
+    };
+  }
+
   private readString(row: Row, key: string): string | undefined {
     const value = row[key];
     return typeof value === 'string' ? value : undefined;
+  }
+
+  private readNullableString(row: Row, key: string): string | null {
+    const value = row[key];
+    return typeof value === 'string' ? value : null;
+  }
+
+  private readNumber(row: Row, key: string): number | undefined {
+    const value = row[key];
+    return typeof value === 'number' ? value : undefined;
+  }
+
+  private formatColumnLabel(column: ColumnMetadata): string {
+    const parts = [column.name, column.dataType];
+
+    if (!column.isNullable) {
+      parts.push('NOT NULL');
+    } else if (column.defaultValue === null) {
+      parts.push('NULL');
+    }
+
+    if (column.defaultValue !== null) {
+      parts.push(`DEFAULT ${column.defaultValue}`);
+    }
+
+    return parts.join(' ');
+  }
+
+  private formatColumnDescription(column: ColumnMetadata): string {
+    return `#${column.ordinalPosition}`;
+  }
+
+  private formatColumnTooltip(node: ColumnNode): string {
+    const nullableText = node.column.isNullable ? 'YES' : 'NO';
+    const defaultText = node.column.defaultValue ?? 'none';
+
+    return [
+      `${node.schema}.${node.table}.${node.column.name}`,
+      `Type: ${node.column.dataType}`,
+      `Nullable: ${nullableText}`,
+      `Default: ${defaultText}`,
+      `Position: ${node.column.ordinalPosition}`,
+    ].join('\n');
   }
 }
