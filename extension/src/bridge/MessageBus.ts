@@ -7,9 +7,15 @@ import type * as vscode from 'vscode';
 type MessageHandler<T extends WebviewToExtensionMessage['type']> = (
   payload: Extract<WebviewToExtensionMessage, { type: T }>['payload']
 ) => void | Promise<void>;
+type MessagePayload<T extends WebviewToExtensionMessage['type']> = Parameters<
+  MessageHandler<T>
+>[0];
 
 export class MessageBus {
-  private handlers = new Map<string, MessageHandler<any>>();
+  private handlers = new Map<
+    WebviewToExtensionMessage['type'],
+    (payload: unknown) => void | Promise<void>
+  >();
   private panel: vscode.WebviewPanel | null = null;
 
   attach(panel: vscode.WebviewPanel) {
@@ -17,7 +23,7 @@ export class MessageBus {
     panel.webview.onDidReceiveMessage((msg: WebviewToExtensionMessage) => {
       const handler = this.handlers.get(msg.type);
       if (handler) {
-        handler((msg as any).payload);
+        void handler(msg.payload);
       } else {
         console.warn(`[MessageBus] No handler for message type: ${msg.type}`);
       }
@@ -28,7 +34,9 @@ export class MessageBus {
     type: T,
     handler: MessageHandler<T>
   ) {
-    this.handlers.set(type, handler);
+    this.handlers.set(type, (payload) => {
+      return handler(payload as MessagePayload<T>);
+    });
     return this;
   }
 

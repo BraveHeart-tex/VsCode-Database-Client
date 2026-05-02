@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { QueryResult } from 'shared';
 import { setContext } from 'svelte';
 import { onMount } from 'svelte';
 import ConnectionForm from './components/ConnectionForm.svelte';
@@ -11,7 +12,9 @@ const bridge = getWebviewBridge();
 setContext(BRIDGE_CONTEXT_KEY, bridge);
 
 let view = $state<View>('connections');
-let activeConnectionIds = $state<string[]>([]);
+let queryResult = $state<QueryResult | null>(null);
+let queryErrorMessage = $state<string | null>(null);
+let isQueryRunning = $state(false);
 
 const tabs: { id: View; label: string }[] = [
   { id: 'connections', label: 'Connections' },
@@ -19,20 +22,29 @@ const tabs: { id: View; label: string }[] = [
 ];
 
 onMount(() => {
-  const offSuccess = bridge.on('CONNECTION_SUCCESS', ({ connectionId }) => {
-    if (!activeConnectionIds.includes(connectionId)) {
-      activeConnectionIds = [...activeConnectionIds, connectionId];
-    }
+  const offQueryRunning = bridge.on('QUERY_RUNNING', () => {
+    isQueryRunning = true;
+    queryErrorMessage = null;
+    view = 'query';
   });
-  const offDeleted = bridge.on('CONNECTION_DELETED', ({ connectionId }) => {
-    activeConnectionIds = activeConnectionIds.filter(
-      (id) => id !== connectionId
-    );
+  const offQueryResult = bridge.on('QUERY_RESULT', (result) => {
+    queryResult = result;
+    queryErrorMessage = null;
+    isQueryRunning = false;
+    view = 'query';
+  });
+  const offQueryError = bridge.on('QUERY_ERROR', ({ message }) => {
+    queryErrorMessage = message;
+    isQueryRunning = false;
+    view = 'query';
   });
 
+  bridge.send({ type: 'WEBVIEW_READY', payload: {} });
+
   return () => {
-    offSuccess();
-    offDeleted();
+    offQueryRunning();
+    offQueryResult();
+    offQueryError();
   };
 });
 </script>
@@ -57,7 +69,9 @@ onMount(() => {
     <ConnectionForm />
   {:else}
     <QueryView
-      {activeConnectionIds}
+      loading={isQueryRunning}
+      result={queryResult}
+      errorMessage={queryErrorMessage}
       onOpenConnections={() => {
         view = 'connections';
       }}

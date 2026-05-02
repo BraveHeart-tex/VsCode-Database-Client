@@ -6,31 +6,30 @@ import {
   getCoreRowModel,
 } from '@tanstack/table-core';
 import { createVirtualizer } from '@tanstack/svelte-virtual';
-import type { Column, ExtensionToWebviewMessage, Row } from 'shared';
-import { getContext, untrack } from 'svelte';
+import type { Column, QueryResult, Row } from 'shared';
+import { untrack } from 'svelte';
 import { get } from 'svelte/store';
-import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
 
-type QueryErrorPayload = Extract<
-  ExtensionToWebviewMessage,
-  { type: 'QUERY_ERROR' }
->['payload'];
-
-const { loading = false } = $props<{
+const {
+  loading = false,
+  result = null,
+  errorMessage = null,
+} = $props<{
   loading?: boolean;
+  result?: QueryResult | null;
+  errorMessage?: string | null;
 }>();
 
-const bridge = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
 const columnHelper = createColumnHelper<Row>();
 
-let currentRows = $state<Row[]>([]);
-let currentColumns = $state<Column[]>([]);
-let currentRowCount = $state(0);
-let currentDuration = $state(0);
-let isLoading = $state(false);
-let hasRunQuery = $state(false);
-let errorMessage = $state<string | null>(null);
 let scrollElement = $state<HTMLDivElement | null>(null);
+const currentRows = $derived(result?.rows ?? []);
+const currentColumns = $derived(result?.columns ?? []);
+const currentRowCount = $derived(result?.rowCount ?? 0);
+const currentDuration = $derived(result?.duration ?? 0);
+const hasRunQuery = $derived(
+  loading || result !== null || errorMessage !== null
+);
 
 const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
   count: 0,
@@ -48,10 +47,6 @@ const virtualRows = $derived($virtualizer.getVirtualItems());
 const totalSize = $derived($virtualizer.getTotalSize());
 
 $effect(() => {
-  isLoading = loading;
-});
-
-$effect(() => {
   const count = currentRows.length;
 
   untrack(() => {
@@ -62,32 +57,6 @@ $effect(() => {
       overscan: 8,
     });
   });
-});
-
-$effect(() => {
-  const offResult = bridge.on('QUERY_RESULT', (result) => {
-    currentRows = result.rows;
-    currentColumns = result.columns;
-    currentRowCount = result.rowCount;
-    currentDuration = result.duration;
-    isLoading = false;
-    hasRunQuery = true;
-    errorMessage = null;
-  });
-
-  const offError = bridge.on(
-    'QUERY_ERROR',
-    ({ message }: QueryErrorPayload) => {
-      isLoading = false;
-      hasRunQuery = true;
-      errorMessage = message;
-    }
-  );
-
-  return () => {
-    offResult();
-    offError();
-  };
 });
 
 function createTableOptions(
@@ -133,7 +102,7 @@ function formatCellValue(value: unknown) {
 
 function headerColumn(header: Header<Row, unknown>) {
   return (
-    currentColumns.find((column) => column.name === header.id) ?? {
+    currentColumns.find((column: Column) => column.name === header.id) ?? {
       name: header.id,
       dataType: 'unknown',
     }
@@ -143,20 +112,18 @@ function headerColumn(header: Header<Row, unknown>) {
 function renderCell(cell: Cell<Row, unknown>) {
   return formatCellValue(cell.getValue());
 }
-
-$inspect(currentRows);
 </script>
 
 <section class="results-grid" aria-labelledby="results-grid-title">
   <header class="toolbar">
     <h2 id="results-grid-title">Results</h2>
 
-    {#if hasRunQuery && !isLoading && !errorMessage}
+    {#if hasRunQuery && !loading && !errorMessage}
       <span>{currentRowCount} rows in {currentDuration} ms</span>
     {/if}
   </header>
 
-  {#if isLoading}
+  {#if loading}
     <div class="state" role="status" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
       Running query...

@@ -9,7 +9,7 @@
       "extension/**/*.{json,jsonc,js,cjs,mjs,ts}",
       "lsp-server/**/*.{json,jsonc,js,cjs,mjs,ts}",
       "shared/**/*.{json,jsonc,js,cjs,mjs,ts}",
-      "webview-ui/**/*.{json,jsonc,js,cjs,mjs,ts,svelte}",
+      "webview-ui/**/*.{json,jsonc,js,cjs,mjs,ts}",
 
       "!!**/node_modules",
       "!!**/dist",

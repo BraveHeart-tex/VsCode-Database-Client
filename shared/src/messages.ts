@@ -1,14 +1,15 @@
 export type WebviewToExtensionMessage =
-  | { type: 'EXECUTE_QUERY'; payload: { sql: string; connectionId: string } }
   | { type: 'CONNECT'; payload: ConnectionConfig }
   | { type: 'DISCONNECT'; payload: { connectionId: string } }
   | { type: 'GET_SCHEMA'; payload: { connectionId: string } }
   | { type: 'CANCEL_QUERY'; payload: { queryId: string } }
   | { type: 'SAVE_CONNECTION'; payload: ConnectionConfig }
   | { type: 'DELETE_CONNECTION'; payload: { connectionId: string } }
-  | { type: 'GET_CONNECTIONS'; payload: Record<string, never> };
+  | { type: 'GET_CONNECTIONS'; payload: Record<string, never> }
+  | { type: 'WEBVIEW_READY'; payload: Record<string, never> };
 
 export type ExtensionToWebviewMessage =
+  | { type: 'QUERY_RUNNING'; payload: { connectionId: string } }
   | { type: 'QUERY_RESULT'; payload: QueryResult }
   | { type: 'QUERY_ERROR'; payload: { message: string; queryId: string } }
   | {

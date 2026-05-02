@@ -35,8 +35,44 @@
       {
         "command": "db-client.openPanel",
         "title": "Open DB Client"
+      },
+      {
+        "command": "db-client.newQuery",
+        "title": "New Query",
+        "category": "DB Client",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "db-client.executeQuery",
+        "title": "Execute Query",
+        "category": "DB Client",
+        "icon": "$(run)"
       }
-    ]
+    ],
+    "keybindings": [
+      {
+        "command": "db-client.executeQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && resourceLangId == sql"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "db-client.newQuery",
+          "when": "view == db-client.connections && viewItem == dbClient.connection",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "db-client.executeQuery",
+          "when": "resourceLangId == sql",
+          "group": "navigation@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "dev": "node esbuild.js --watch",
