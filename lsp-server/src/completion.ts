@@ -15,6 +15,7 @@ import { get as getSchema } from './schemaCache';
 import {
   getCompletionContext,
   getRelationsForStatement,
+  getSelectedColumnNamesBeforeCursor,
   resolveRelationTables,
 } from './sqlContext';
 
@@ -64,7 +65,10 @@ export function createCompletionItems(
 
   if (context.kind === 'selectList') {
     const tables = resolveRelationTables(metadata, context.relations);
-    return createColumnCompletionItems(tables);
+    return createColumnCompletionItems(
+      tables,
+      getSelectedColumnNamesBeforeCursor(text, cursorOffset)
+    );
   }
 
   return [
@@ -114,10 +118,13 @@ function createTableCompletionItems(
 }
 
 function createColumnCompletionItems(
-  tables: SchemaMetadataTable[]
+  tables: SchemaMetadataTable[],
+  excludedColumnNames = new Set<string>()
 ): CompletionItem[] {
   return tables.flatMap((table) =>
-    table.columns.map((column) => createColumnCompletionItem(table, column))
+    table.columns
+      .filter((column) => !excludedColumnNames.has(column.name.toLowerCase()))
+      .map((column) => createColumnCompletionItem(table, column))
   );
 }
 

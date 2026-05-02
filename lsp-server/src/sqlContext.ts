@@ -69,6 +69,36 @@ export function getRelationsForStatement(
   return getRelationReferences(getCurrentStatement(text, cursorOffset).text);
 }
 
+export function getSelectedColumnNamesBeforeCursor(
+  text: string,
+  cursorOffset: number
+): Set<string> {
+  const statement = getCurrentStatement(text, cursorOffset);
+  const beforeCursor = statement.text.slice(0, statement.cursorOffset);
+  const selectMatch = /\bselect\b/i.exec(beforeCursor);
+  if (!selectMatch) {
+    return new Set();
+  }
+
+  // Only extract columns between SELECT and FROM — stop at FROM so
+  // table names are never mistaken for already-selected column names
+  const afterSelect = beforeCursor.slice(
+    selectMatch.index + selectMatch[0].length
+  );
+  const fromIndex = afterSelect.search(/\bfrom\b/i);
+  const selectList =
+    fromIndex >= 0 ? afterSelect.slice(0, fromIndex) : afterSelect;
+
+  const selectedColumns = new Set<string>();
+  for (const item of selectList.split(',')) {
+    const columnName = readSimpleSelectedColumn(item.trim());
+    if (columnName) {
+      selectedColumns.add(columnName.toLowerCase());
+    }
+  }
+  return selectedColumns;
+}
+
 function getCurrentStatement(
   text: string,
   cursorOffset: number
@@ -94,6 +124,33 @@ function readQualifiedColumnQualifier(
   return match ? normalizeIdentifier(match[1]) : undefined;
 }
 
+function readSimpleSelectedColumn(value: string): string | undefined {
+  const trimmed = removeSimpleAlias(value.trim());
+  const match =
+    /^(?:(?:"[^"]+"|[a-zA-Z_][\w$]*)\.)?((?:"[^"]+"|[a-zA-Z_][\w$]*))$/.exec(
+      trimmed
+    );
+
+  return match ? normalizeIdentifier(match[1]) : undefined;
+}
+
+function removeSimpleAlias(value: string): string {
+  const explicitAlias = /^(.+?)\s+as\s+(?:"[^"]+"|[a-zA-Z_][\w$]*)$/i.exec(
+    value
+  );
+
+  if (explicitAlias) {
+    return explicitAlias[1].trim();
+  }
+
+  const implicitAlias =
+    /^((?:(?:"[^"]+"|[a-zA-Z_][\w$]*)\.)?(?:"[^"]+"|[a-zA-Z_][\w$]*))\s+(?:"[^"]+"|[a-zA-Z_][\w$]*)$/i.exec(
+      value
+    );
+
+  return implicitAlias ? implicitAlias[1].trim() : value;
+}
+
 function isTablePosition(statement: string, cursorOffset: number): boolean {
   const beforeCursor = statement.slice(0, cursorOffset);
   return /\b(?:from|join)\s+(?:(?:"[^"]*"|[a-zA-Z_][\w$]*)(?:\s*\.\s*(?:"[^"]*"|[a-zA-Z_][\w$]*))?)?$/i.test(
@@ -107,18 +164,13 @@ function isSelectListPosition(
 ): boolean {
   const beforeCursor = statement.slice(0, cursorOffset).toLowerCase();
   const selectIndex = beforeCursor.lastIndexOf('select');
-
   if (selectIndex < 0) {
     return false;
   }
 
-  const fromBeforeCursor = beforeCursor.lastIndexOf('from');
-
-  if (fromBeforeCursor > selectIndex) {
-    return false;
-  }
-
-  return /\bfrom\b/i.test(statement.slice(selectIndex));
+  // Cursor must be after SELECT but before any FROM
+  const fromIndex = beforeCursor.indexOf('from', selectIndex);
+  return fromIndex < 0;
 }
 
 function getRelationReferences(statement: string): RelationReference[] {
