@@ -7,9 +7,26 @@
     "vscode": "^1.113.0"
   },
   "categories": ["Other"],
-  "activationEvents": [],
+  "activationEvents": ["onView:db-client.connections"],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "db-client",
+          "title": "DB Client",
+          "icon": "resources/database.svg"
+        }
+      ]
+    },
+    "views": {
+      "db-client": [
+        {
+          "id": "db-client.connections",
+          "name": "Connections"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "db-client.helloWorld",

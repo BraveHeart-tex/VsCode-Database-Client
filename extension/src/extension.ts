@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { MessageBus } from './bridge/MessageBus';
 import { ConnectionManager } from './db/ConnectionManager';
 import { MainPanel } from './panels/MainPanel';
+import { SchemaTreeProvider } from './providers/SchemaTreeProvider';
 
 const bus = new MessageBus();
 const connectionManager = new ConnectionManager();
@@ -12,6 +13,14 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('db-client extension activated');
 
   connectionStore = new ConnectionStore(context.secrets);
+  const schemaTreeProvider = new SchemaTreeProvider(
+    connectionStore,
+    connectionManager
+  );
+  const connectionsTreeView = vscode.window.createTreeView(
+    'db-client.connections',
+    { treeDataProvider: schemaTreeProvider }
+  );
 
   const helloWorldCommand = vscode.commands.registerCommand(
     'db-client.helloWorld',
@@ -24,7 +33,11 @@ export function activate(context: vscode.ExtensionContext) {
     () => MainPanel.create(context, bus)
   );
 
-  context.subscriptions.push(helloWorldCommand, openPanelCommand);
+  context.subscriptions.push(
+    helloWorldCommand,
+    openPanelCommand,
+    connectionsTreeView
+  );
 
   bus
     .on('GET_CONNECTIONS', async () => {
@@ -33,6 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
     .on('SAVE_CONNECTION', async (config) => {
       await connectionStore.save(config);
+      schemaTreeProvider.refresh();
       bus.send({
         type: 'CONNECTION_SAVED',
         payload: { connectionId: config.id },
@@ -41,6 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
     .on('DELETE_CONNECTION', async ({ connectionId }) => {
       await connectionStore.delete(connectionId);
       await connectionManager.disconnect(connectionId);
+      schemaTreeProvider.refresh();
       bus.send({ type: 'CONNECTION_DELETED', payload: { connectionId } });
     })
     .on('CONNECT', async (config) => {
@@ -50,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
           payload: { connectionId: config.id },
         });
         await connectionManager.connect(config);
+        schemaTreeProvider.refresh();
         bus.send({
           type: 'CONNECTION_SUCCESS',
           payload: { connectionId: config.id },
@@ -74,6 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
     .on('DISCONNECT', async ({ connectionId }) => {
       await connectionManager.disconnect(connectionId);
+      schemaTreeProvider.refresh();
     });
 }
 
