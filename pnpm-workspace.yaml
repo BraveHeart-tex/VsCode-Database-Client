@@ -1,0 +1,1 @@
+packages: ["extension", "webview-ui", "lsp-server"]
