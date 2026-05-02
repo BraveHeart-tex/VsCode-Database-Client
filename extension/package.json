@@ -14,6 +14,10 @@
       {
         "command": "db-client.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "db-client.openPanel",
+        "title": "Open DB Client"
       }
     ]
   },

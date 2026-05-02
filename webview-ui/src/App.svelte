@@ -1,89 +1,92 @@
-<script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+<script lang="ts">
+  import { setContext } from 'svelte';
+  import ConnectionForm from './components/ConnectionForm.svelte';
+  import QueryView from './components/QueryView.svelte';
+  import {
+    BRIDGE_CONTEXT_KEY,
+    createWebviewBridge,
+  } from './lib/bridge';
+
+  type View = 'connections' | 'query';
+
+  const bridge = createWebviewBridge(acquireVsCodeApi());
+  setContext(BRIDGE_CONTEXT_KEY, bridge);
+
+  let view = $state<View>('connections');
+
+  const tabs: { id: View; label: string }[] = [
+    { id: 'connections', label: 'Connections' },
+    { id: 'query', label: 'Query' },
+  ];
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<main class="app-shell">
+  <nav class="tabs" aria-label="Main view">
+    {#each tabs as tab}
+      <button
+        type="button"
+        class:active={view === tab.id}
+        aria-current={view === tab.id ? 'page' : undefined}
+        onclick={() => {
+          view = tab.id;
+        }}
+      >
+        {tab.label}
+      </button>
+    {/each}
+  </nav>
 
-<div class="ticks"></div>
+  {#if view === 'connections'}
+    <ConnectionForm />
+  {:else}
+    <QueryView />
+  {/if}
+</main>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
+<style>
+  .app-shell {
+    width: min(100%, 860px);
+    color: var(--vscode-foreground);
+  }
 
-<div class="ticks"></div>
-<section id="spacer"></section>
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding: 12px 24px 0;
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+
+  .tabs button {
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--vscode-tab-inactiveForeground);
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .tabs button:hover {
+    color: var(--vscode-tab-activeForeground);
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+
+  .tabs button:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
+  .tabs button.active {
+    color: var(--vscode-tab-activeForeground);
+    background: var(--vscode-tab-activeBackground);
+    border-color: var(--vscode-focusBorder);
+  }
+
+  @media (max-width: 560px) {
+    .tabs {
+      padding-inline: 16px;
+    }
+  }
+</style>

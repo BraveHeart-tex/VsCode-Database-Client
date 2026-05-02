@@ -2,6 +2,7 @@ import { ConnectionStore } from 'src/db/ConnectionStore';
 import * as vscode from 'vscode';
 import { MessageBus } from './bridge/MessageBus';
 import { ConnectionManager } from './db/ConnectionManager';
+import { MainPanel } from './panels/MainPanel';
 
 const bus = new MessageBus();
 const connectionManager = new ConnectionManager();
@@ -12,14 +13,18 @@ export function activate(context: vscode.ExtensionContext) {
 
   connectionStore = new ConnectionStore(context.secrets);
 
-  const disposable = vscode.commands.registerCommand(
+  const helloWorldCommand = vscode.commands.registerCommand(
     'db-client.helloWorld',
     () => {
       vscode.window.showInformationMessage('Hello from db-client!');
     }
   );
+  const openPanelCommand = vscode.commands.registerCommand(
+    'db-client.openPanel',
+    () => MainPanel.create(context, bus)
+  );
 
-  context.subscriptions.push(disposable);
+  context.subscriptions.push(helloWorldCommand, openPanelCommand);
 
   bus
     .on('GET_CONNECTIONS', async () => {

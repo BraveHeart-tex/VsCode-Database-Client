@@ -1,26 +1,28 @@
 import type {
-  WebviewToExtensionMessage,
   ExtensionToWebviewMessage,
+  WebviewToExtensionMessage,
 } from "shared";
 
-declare function acquireVsCodeApi(): {
+export const BRIDGE_CONTEXT_KEY = Symbol("bridge");
+
+export interface VsCodeApi {
   postMessage(msg: WebviewToExtensionMessage): void;
   getState(): unknown;
   setState(state: unknown): void;
-};
+}
 
-// Acquire once!
-// calling it twice throws
-const vscode = acquireVsCodeApi();
+declare global {
+  function acquireVsCodeApi(): VsCodeApi;
+}
 
 type MessageHandler<T extends ExtensionToWebviewMessage["type"]> = (
   payload: Extract<ExtensionToWebviewMessage, { type: T }>["payload"],
 ) => void;
 
-class WebviewBridge {
+export class WebviewBridge {
   private handlers = new Map<string, Set<MessageHandler<any>>>();
 
-  constructor() {
+  constructor(private readonly vscode: VsCodeApi) {
     window.addEventListener("message", (event) => {
       const msg = event.data as ExtensionToWebviewMessage;
       const set = this.handlers.get(msg.type);
@@ -31,7 +33,7 @@ class WebviewBridge {
   }
 
   send(message: WebviewToExtensionMessage) {
-    vscode.postMessage(message);
+    this.vscode.postMessage(message);
   }
 
   on<T extends ExtensionToWebviewMessage["type"]>(
@@ -47,4 +49,6 @@ class WebviewBridge {
   }
 }
 
-export const bridge = new WebviewBridge();
+export function createWebviewBridge(vscode: VsCodeApi) {
+  return new WebviewBridge(vscode);
+}
