@@ -1,17 +1,25 @@
 {
   "private": true,
   "lint-staged": {
-    "*.{js,ts,json,cjs,mjs,md,css,tsx,jsx,json}": [
+    "*.{js,ts,json,cjs,mjs,md,css,tsx,jsx}": [
       "biome check --write --no-errors-on-unmatched"
-    ]
+    ],
+    "*.svelte": ["prettier --write --ignore-unknown"]
   },
   "scripts": {
     "dev": "concurrently \"pnpm -C extension dev\" \"pnpm -C webview-ui dev\" \"pnpm -C lsp-server dev\"",
     "build": "pnpm -C webview-ui build && pnpm -C extension build && pnpm -C lsp-server build",
     "package": "pnpm build && cd extension && vsce package --no-dependencies",
+
     "lint": "biome lint .",
-    "format": "biome format --write .",
-    "check": "biome check --write .",
+    "format": "pnpm format:biome && pnpm format:svelte",
+    "format:biome": "biome format --write .",
+    "format:svelte": "prettier --write \"**/*.svelte\"",
+
+    "check": "pnpm check:biome && pnpm check:svelte",
+    "check:biome": "biome check --write .",
+    "check:svelte": "prettier --check \"**/*.svelte\"",
+
     "prepare": "husky"
   },
   "devDependencies": {
@@ -20,6 +28,8 @@
     "@commitlint/config-conventional": "20.5.3",
     "concurrently": "^9.2.1",
     "husky": "9.1.7",
-    "lint-staged": "16.4.0"
+    "lint-staged": "16.4.0",
+    "prettier": "3.8.3",
+    "prettier-plugin-svelte": "3.5.1"
   }
 }

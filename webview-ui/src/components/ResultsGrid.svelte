@@ -1,117 +1,121 @@
 <script lang="ts">
-import type { Cell, Header, TableOptionsResolved } from '@tanstack/table-core';
-import {
-  createColumnHelper,
-  createTable,
-  getCoreRowModel,
-} from '@tanstack/table-core';
-import { createVirtualizer } from '@tanstack/svelte-virtual';
-import type { Column, QueryResult, Row } from 'shared';
-import { untrack } from 'svelte';
-import { get } from 'svelte/store';
+  import type {
+    Cell,
+    Header,
+    TableOptionsResolved,
+  } from '@tanstack/table-core';
+  import {
+    createColumnHelper,
+    createTable,
+    getCoreRowModel,
+  } from '@tanstack/table-core';
+  import { createVirtualizer } from '@tanstack/svelte-virtual';
+  import type { Column, QueryResult, Row } from 'shared';
+  import { untrack } from 'svelte';
+  import { get } from 'svelte/store';
 
-const {
-  loading = false,
-  result = null,
-  errorMessage = null,
-} = $props<{
-  loading?: boolean;
-  result?: QueryResult | null;
-  errorMessage?: string | null;
-}>();
+  const {
+    loading = false,
+    result = null,
+    errorMessage = null,
+  } = $props<{
+    loading?: boolean;
+    result?: QueryResult | null;
+    errorMessage?: string | null;
+  }>();
 
-const columnHelper = createColumnHelper<Row>();
+  const columnHelper = createColumnHelper<Row>();
 
-let scrollElement = $state<HTMLDivElement | null>(null);
-const currentRows = $derived(result?.rows ?? []);
-const currentColumns = $derived(result?.columns ?? []);
-const currentRowCount = $derived(result?.rowCount ?? 0);
-const currentDuration = $derived(result?.duration ?? 0);
-const hasRunQuery = $derived(
-  loading || result !== null || errorMessage !== null
-);
+  let scrollElement = $state<HTMLDivElement | null>(null);
+  const currentRows = $derived(result?.rows ?? []);
+  const currentColumns = $derived(result?.columns ?? []);
+  const currentRowCount = $derived(result?.rowCount ?? 0);
+  const currentDuration = $derived(result?.duration ?? 0);
+  const hasRunQuery = $derived(
+    loading || result !== null || errorMessage !== null
+  );
 
-const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
-  count: 0,
-  getScrollElement: () => scrollElement,
-  estimateSize: () => 32,
-  overscan: 8,
-});
+  const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: 0,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 32,
+    overscan: 8,
+  });
 
-const table = $derived(
-  createTable(createTableOptions(currentRows, currentColumns))
-);
+  const table = $derived(
+    createTable(createTableOptions(currentRows, currentColumns))
+  );
 
-const tableRows = $derived(table.getRowModel().rows);
-const virtualRows = $derived($virtualizer.getVirtualItems());
-const totalSize = $derived($virtualizer.getTotalSize());
+  const tableRows = $derived(table.getRowModel().rows);
+  const virtualRows = $derived($virtualizer.getVirtualItems());
+  const totalSize = $derived($virtualizer.getTotalSize());
 
-$effect(() => {
-  const count = currentRows.length;
+  $effect(() => {
+    const count = currentRows.length;
 
-  untrack(() => {
-    get(virtualizer).setOptions({
-      count,
-      getScrollElement: () => scrollElement,
-      estimateSize: () => 32,
-      overscan: 8,
+    untrack(() => {
+      get(virtualizer).setOptions({
+        count,
+        getScrollElement: () => scrollElement,
+        estimateSize: () => 32,
+        overscan: 8,
+      });
     });
   });
-});
 
-function createTableOptions(
-  data: Row[],
-  resultColumns: Column[]
-): TableOptionsResolved<Row> {
-  return {
-    data,
-    columns: resultColumns.map((column) =>
-      columnHelper.accessor((row) => row[column.name], {
-        id: column.name,
-        header: () => column,
-        cell: (info) => formatCellValue(info.getValue()),
-      })
-    ),
-    getCoreRowModel: getCoreRowModel(),
-    onStateChange: () => {},
-    renderFallbackValue: null,
-    state: {
-      columnPinning: {
-        left: [],
-        right: [],
+  function createTableOptions(
+    data: Row[],
+    resultColumns: Column[]
+  ): TableOptionsResolved<Row> {
+    return {
+      data,
+      columns: resultColumns.map((column) =>
+        columnHelper.accessor((row) => row[column.name], {
+          id: column.name,
+          header: () => column,
+          cell: (info) => formatCellValue(info.getValue()),
+        })
+      ),
+      getCoreRowModel: getCoreRowModel(),
+      onStateChange: () => {},
+      renderFallbackValue: null,
+      state: {
+        columnPinning: {
+          left: [],
+          right: [],
+        },
       },
-    },
-  };
-}
-
-function formatCellValue(value: unknown) {
-  if (value === null) {
-    return 'NULL';
+    };
   }
 
-  if (value === undefined) {
-    return '';
-  }
-
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-
-  return String(value);
-}
-
-function headerColumn(header: Header<Row, unknown>) {
-  return (
-    currentColumns.find((column: Column) => column.name === header.id) ?? {
-      name: header.id,
-      dataType: 'unknown',
+  function formatCellValue(value: unknown) {
+    if (value === null) {
+      return 'NULL';
     }
-  );
-}
 
-function renderCell(cell: Cell<Row, unknown>) {
-  return formatCellValue(cell.getValue());
-}
+    if (value === undefined) {
+      return '';
+    }
+
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  }
+
+  function headerColumn(header: Header<Row, unknown>) {
+    return (
+      currentColumns.find((column: Column) => column.name === header.id) ?? {
+        name: header.id,
+        dataType: 'unknown',
+      }
+    );
+  }
+
+  function renderCell(cell: Cell<Row, unknown>) {
+    return formatCellValue(cell.getValue());
+  }
 </script>
 
 <section class="results-grid" aria-labelledby="results-grid-title">

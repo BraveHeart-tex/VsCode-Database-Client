@@ -1,18 +1,18 @@
 <script lang="ts">
-import type { QueryResult } from 'shared';
-import ResultsGrid from './ResultsGrid.svelte';
+  import type { QueryResult } from 'shared';
+  import ResultsGrid from './ResultsGrid.svelte';
 
-const {
-  loading = false,
-  result = null,
-  errorMessage = null,
-  onOpenConnections,
-} = $props<{
-  loading?: boolean;
-  result?: QueryResult | null;
-  errorMessage?: string | null;
-  onOpenConnections: () => void;
-}>();
+  const {
+    loading = false,
+    result = null,
+    errorMessage = null,
+    onOpenConnections,
+  } = $props<{
+    loading?: boolean;
+    result?: QueryResult | null;
+    errorMessage?: string | null;
+    onOpenConnections: () => void;
+  }>();
 </script>
 
 <section class="query-view" aria-labelledby="query-view-title">

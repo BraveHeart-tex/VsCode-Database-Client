@@ -1,145 +1,145 @@
 <script lang="ts">
-import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
-import { getContext, onMount } from 'svelte';
-import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
+  import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
+  import { getContext, onMount } from 'svelte';
+  import { BRIDGE_CONTEXT_KEY, type WebviewBridge } from '../lib/bridge';
 
-type Feedback = {
-  kind: 'success' | 'error';
-  message: string;
-} | null;
-type Payload<T extends ExtensionToWebviewMessage['type']> = Extract<
-  ExtensionToWebviewMessage,
-  { type: T }
->['payload'];
+  type Feedback = {
+    kind: 'success' | 'error';
+    message: string;
+  } | null;
+  type Payload<T extends ExtensionToWebviewMessage['type']> = Extract<
+    ExtensionToWebviewMessage,
+    { type: T }
+  >['payload'];
 
-const bridgeClient = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
+  const bridgeClient = getContext<WebviewBridge>(BRIDGE_CONTEXT_KEY);
 
-let form = $state({
-  name: '',
-  host: '',
-  port: 5432,
-  database: '',
-  username: '',
-  password: '',
-  ssl: false,
-});
-let connections = $state<ConnectionConfig[]>([]);
-let testingConnectionId = $state<string | null>(null);
-let feedback = $state<Feedback>(null);
-
-const isTesting = $derived(testingConnectionId !== null);
-
-onMount(() => {
-  const offList = bridgeClient.on(
-    'CONNECTIONS_LIST',
-    ({ connections: next }: Payload<'CONNECTIONS_LIST'>) => {
-      connections = next;
-    }
-  );
-  const offTesting = bridgeClient.on(
-    'CONNECTION_TESTING',
-    ({ connectionId }: Payload<'CONNECTION_TESTING'>) => {
-      testingConnectionId = connectionId;
-      feedback = null;
-    }
-  );
-  const offSuccess = bridgeClient.on(
-    'CONNECTION_SUCCESS',
-    ({ connectionId }: Payload<'CONNECTION_SUCCESS'>) => {
-      testingConnectionId = null;
-      feedback = {
-        kind: 'success',
-        message: `Connected to ${getConnectionLabel(connectionId)}.`,
-      };
-      bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
-    }
-  );
-  const offSaved = bridgeClient.on('CONNECTION_SAVED', () => {
-    bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
+  let form = $state({
+    name: '',
+    host: '',
+    port: 5432,
+    database: '',
+    username: '',
+    password: '',
+    ssl: false,
   });
-  const offError = bridgeClient.on(
-    'CONNECTION_ERROR',
-    ({ message }: Payload<'CONNECTION_ERROR'>) => {
-      testingConnectionId = null;
-      feedback = { kind: 'error', message };
-    }
-  );
-  const offDeleted = bridgeClient.on(
-    'CONNECTION_DELETED',
-    ({ connectionId }: Payload<'CONNECTION_DELETED'>) => {
-      connections = connections.filter(
-        (connection) => connection.id !== connectionId
-      );
-      if (testingConnectionId === connectionId) {
-        testingConnectionId = null;
+  let connections = $state<ConnectionConfig[]>([]);
+  let testingConnectionId = $state<string | null>(null);
+  let feedback = $state<Feedback>(null);
+
+  const isTesting = $derived(testingConnectionId !== null);
+
+  onMount(() => {
+    const offList = bridgeClient.on(
+      'CONNECTIONS_LIST',
+      ({ connections: next }: Payload<'CONNECTIONS_LIST'>) => {
+        connections = next;
       }
-      feedback = { kind: 'success', message: 'Connection deleted.' };
-    }
-  );
+    );
+    const offTesting = bridgeClient.on(
+      'CONNECTION_TESTING',
+      ({ connectionId }: Payload<'CONNECTION_TESTING'>) => {
+        testingConnectionId = connectionId;
+        feedback = null;
+      }
+    );
+    const offSuccess = bridgeClient.on(
+      'CONNECTION_SUCCESS',
+      ({ connectionId }: Payload<'CONNECTION_SUCCESS'>) => {
+        testingConnectionId = null;
+        feedback = {
+          kind: 'success',
+          message: `Connected to ${getConnectionLabel(connectionId)}.`,
+        };
+        bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
+      }
+    );
+    const offSaved = bridgeClient.on('CONNECTION_SAVED', () => {
+      bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
+    });
+    const offError = bridgeClient.on(
+      'CONNECTION_ERROR',
+      ({ message }: Payload<'CONNECTION_ERROR'>) => {
+        testingConnectionId = null;
+        feedback = { kind: 'error', message };
+      }
+    );
+    const offDeleted = bridgeClient.on(
+      'CONNECTION_DELETED',
+      ({ connectionId }: Payload<'CONNECTION_DELETED'>) => {
+        connections = connections.filter(
+          (connection) => connection.id !== connectionId
+        );
+        if (testingConnectionId === connectionId) {
+          testingConnectionId = null;
+        }
+        feedback = { kind: 'success', message: 'Connection deleted.' };
+      }
+    );
 
-  bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
+    bridgeClient.send({ type: 'GET_CONNECTIONS', payload: {} });
 
-  return () => {
-    offList();
-    offTesting();
-    offSuccess();
-    offSaved();
-    offError();
-    offDeleted();
-  };
-});
-
-function submitConnection() {
-  const config = createConnectionConfig();
-
-  feedback = null;
-  bridgeClient.send({ type: 'SAVE_CONNECTION', payload: config });
-  bridgeClient.send({ type: 'CONNECT', payload: config });
-}
-
-function connect(connection: ConnectionConfig) {
-  feedback = null;
-  bridgeClient.send({
-    type: 'CONNECT',
-    payload: toConnectionConfig(connection),
+    return () => {
+      offList();
+      offTesting();
+      offSuccess();
+      offSaved();
+      offError();
+      offDeleted();
+    };
   });
-}
 
-function deleteConnection(connectionId: string) {
-  feedback = null;
-  bridgeClient.send({ type: 'DELETE_CONNECTION', payload: { connectionId } });
-}
+  function submitConnection() {
+    const config = createConnectionConfig();
 
-function createConnectionConfig(): ConnectionConfig {
-  return {
-    id: crypto.randomUUID(),
-    name: form.name.trim(),
-    host: form.host.trim(),
-    port: Number(form.port),
-    database: form.database.trim(),
-    username: form.username.trim(),
-    password: form.password,
-    ssl: form.ssl,
-  };
-}
+    feedback = null;
+    bridgeClient.send({ type: 'SAVE_CONNECTION', payload: config });
+    bridgeClient.send({ type: 'CONNECT', payload: config });
+  }
 
-function toConnectionConfig(connection: ConnectionConfig): ConnectionConfig {
-  return {
-    id: connection.id,
-    name: connection.name,
-    host: connection.host,
-    port: Number(connection.port),
-    database: connection.database,
-    username: connection.username,
-    password: connection.password,
-    ssl: connection.ssl,
-  };
-}
+  function connect(connection: ConnectionConfig) {
+    feedback = null;
+    bridgeClient.send({
+      type: 'CONNECT',
+      payload: toConnectionConfig(connection),
+    });
+  }
 
-function getConnectionLabel(connectionId: string) {
-  const connection = connections.find(({ id }) => id === connectionId);
-  return connection?.name || form.name || connectionId;
-}
+  function deleteConnection(connectionId: string) {
+    feedback = null;
+    bridgeClient.send({ type: 'DELETE_CONNECTION', payload: { connectionId } });
+  }
+
+  function createConnectionConfig(): ConnectionConfig {
+    return {
+      id: crypto.randomUUID(),
+      name: form.name.trim(),
+      host: form.host.trim(),
+      port: Number(form.port),
+      database: form.database.trim(),
+      username: form.username.trim(),
+      password: form.password,
+      ssl: form.ssl,
+    };
+  }
+
+  function toConnectionConfig(connection: ConnectionConfig): ConnectionConfig {
+    return {
+      id: connection.id,
+      name: connection.name,
+      host: connection.host,
+      port: Number(connection.port),
+      database: connection.database,
+      username: connection.username,
+      password: connection.password,
+      ssl: connection.ssl,
+    };
+  }
+
+  function getConnectionLabel(connectionId: string) {
+    const connection = connections.find(({ id }) => id === connectionId);
+    return connection?.name || form.name || connectionId;
+  }
 </script>
 
 <section class="connection-form" aria-labelledby="connection-form-title">
@@ -154,10 +154,13 @@ function getConnectionLabel(connectionId: string) {
     {/if}
   </header>
 
-  <form class="form" onsubmit={(event) => {
-    event.preventDefault();
-    submitConnection();
-  }}>
+  <form
+    class="form"
+    onsubmit={(event) => {
+      event.preventDefault();
+      submitConnection();
+    }}
+  >
     <label>
       <span>Name</span>
       <input bind:value={form.name} name="name" required autocomplete="off" />
@@ -184,13 +187,23 @@ function getConnectionLabel(connectionId: string) {
 
     <label>
       <span>Database</span>
-      <input bind:value={form.database} name="database" required autocomplete="off" />
+      <input
+        bind:value={form.database}
+        name="database"
+        required
+        autocomplete="off"
+      />
     </label>
 
     <div class="field-row">
       <label>
         <span>Username</span>
-        <input bind:value={form.username} name="username" required autocomplete="username" />
+        <input
+          bind:value={form.username}
+          name="username"
+          required
+          autocomplete="username"
+        />
       </label>
 
       <label>
@@ -210,7 +223,10 @@ function getConnectionLabel(connectionId: string) {
     </label>
 
     {#if feedback}
-      <p class:success={feedback.kind === 'success'} class:error={feedback.kind === 'error'}>
+      <p
+        class:success={feedback.kind === 'success'}
+        class:error={feedback.kind === 'error'}
+      >
         {feedback.message}
       </p>
     {/if}
@@ -229,7 +245,9 @@ function getConnectionLabel(connectionId: string) {
           <li>
             <div>
               <strong>{connection.name}</strong>
-              <span>{connection.username}@{connection.host}:{connection.port}/{connection.database}</span>
+              <span
+                >{connection.username}@{connection.host}:{connection.port}/{connection.database}</span
+              >
             </div>
             <div class="actions">
               <button
@@ -238,7 +256,9 @@ function getConnectionLabel(connectionId: string) {
                 disabled={isTesting}
                 onclick={() => connect(connection)}
               >
-                {testingConnectionId === connection.id ? 'Testing...' : 'Connect'}
+                {testingConnectionId === connection.id
+                  ? 'Testing...'
+                  : 'Connect'}
               </button>
               <button
                 type="button"

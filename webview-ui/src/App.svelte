@@ -1,52 +1,52 @@
 <script lang="ts">
-import type { QueryResult } from 'shared';
-import { setContext } from 'svelte';
-import { onMount } from 'svelte';
-import ConnectionForm from './components/ConnectionForm.svelte';
-import QueryView from './components/QueryView.svelte';
-import { BRIDGE_CONTEXT_KEY, getWebviewBridge } from './lib/bridge';
+  import type { QueryResult } from 'shared';
+  import { setContext } from 'svelte';
+  import { onMount } from 'svelte';
+  import ConnectionForm from './components/ConnectionForm.svelte';
+  import QueryView from './components/QueryView.svelte';
+  import { BRIDGE_CONTEXT_KEY, getWebviewBridge } from './lib/bridge';
 
-type View = 'connections' | 'query';
+  type View = 'connections' | 'query';
 
-const bridge = getWebviewBridge();
-setContext(BRIDGE_CONTEXT_KEY, bridge);
+  const bridge = getWebviewBridge();
+  setContext(BRIDGE_CONTEXT_KEY, bridge);
 
-let view = $state<View>('connections');
-let queryResult = $state<QueryResult | null>(null);
-let queryErrorMessage = $state<string | null>(null);
-let isQueryRunning = $state(false);
+  let view = $state<View>('connections');
+  let queryResult = $state<QueryResult | null>(null);
+  let queryErrorMessage = $state<string | null>(null);
+  let isQueryRunning = $state(false);
 
-const tabs: { id: View; label: string }[] = [
-  { id: 'connections', label: 'Connections' },
-  { id: 'query', label: 'Query' },
-];
+  const tabs: { id: View; label: string }[] = [
+    { id: 'connections', label: 'Connections' },
+    { id: 'query', label: 'Query' },
+  ];
 
-onMount(() => {
-  const offQueryRunning = bridge.on('QUERY_RUNNING', () => {
-    isQueryRunning = true;
-    queryErrorMessage = null;
-    view = 'query';
+  onMount(() => {
+    const offQueryRunning = bridge.on('QUERY_RUNNING', () => {
+      isQueryRunning = true;
+      queryErrorMessage = null;
+      view = 'query';
+    });
+    const offQueryResult = bridge.on('QUERY_RESULT', (result) => {
+      queryResult = result;
+      queryErrorMessage = null;
+      isQueryRunning = false;
+      view = 'query';
+    });
+    const offQueryError = bridge.on('QUERY_ERROR', ({ message }) => {
+      queryErrorMessage = message;
+      isQueryRunning = false;
+      view = 'query';
+    });
+
+    bridge.send({ type: 'WEBVIEW_READY', payload: {} });
+
+    return () => {
+      offQueryRunning();
+      offQueryResult();
+      offQueryError();
+    };
   });
-  const offQueryResult = bridge.on('QUERY_RESULT', (result) => {
-    queryResult = result;
-    queryErrorMessage = null;
-    isQueryRunning = false;
-    view = 'query';
-  });
-  const offQueryError = bridge.on('QUERY_ERROR', ({ message }) => {
-    queryErrorMessage = message;
-    isQueryRunning = false;
-    view = 'query';
-  });
-
-  bridge.send({ type: 'WEBVIEW_READY', payload: {} });
-
-  return () => {
-    offQueryRunning();
-    offQueryResult();
-    offQueryError();
-  };
-});
 </script>
 
 <main class="app-shell">
