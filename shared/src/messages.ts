@@ -1,23 +1,23 @@
 export type WebviewToExtensionMessage =
-  | { type: "EXECUTE_QUERY"; payload: { sql: string; connectionId: string } }
-  | { type: "CONNECT"; payload: ConnectionConfig }
-  | { type: "DISCONNECT"; payload: { connectionId: string } }
-  | { type: "GET_SCHEMA"; payload: { connectionId: string } }
-  | { type: "CANCEL_QUERY"; payload: { queryId: string } };
+  | { type: 'EXECUTE_QUERY'; payload: { sql: string; connectionId: string } }
+  | { type: 'CONNECT'; payload: ConnectionConfig }
+  | { type: 'DISCONNECT'; payload: { connectionId: string } }
+  | { type: 'GET_SCHEMA'; payload: { connectionId: string } }
+  | { type: 'CANCEL_QUERY'; payload: { queryId: string } };
 
 export type ExtensionToWebviewMessage =
-  | { type: "QUERY_RESULT"; payload: QueryResult }
-  | { type: "QUERY_ERROR"; payload: { message: string; queryId: string } }
+  | { type: 'QUERY_RESULT'; payload: QueryResult }
+  | { type: 'QUERY_ERROR'; payload: { message: string; queryId: string } }
   | {
-      type: "QUERY_PAGE";
+      type: 'QUERY_PAGE';
       payload: { rows: Row[]; queryId: string; done: boolean };
     }
   | {
-      type: "SCHEMA_RESULT";
+      type: 'SCHEMA_RESULT';
       payload: { connectionId: string; schema: DbSchema };
     }
-  | { type: "CONNECTION_SUCCESS"; payload: { connectionId: string } }
-  | { type: "CONNECTION_ERROR"; payload: { message: string } };
+  | { type: 'CONNECTION_SUCCESS'; payload: { connectionId: string } }
+  | { type: 'CONNECTION_ERROR'; payload: { message: string } };
 
 // Shared types
 export interface ConnectionConfig {

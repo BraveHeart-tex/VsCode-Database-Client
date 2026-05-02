@@ -3,9 +3,13 @@
   "scripts": {
     "dev": "concurrently \"pnpm -C extension dev\" \"pnpm -C webview-ui dev\" \"pnpm -C lsp-server dev\"",
     "build": "pnpm -C webview-ui build && pnpm -C extension build && pnpm -C lsp-server build",
-    "package": "pnpm build && cd extension && vsce package --no-dependencies"
+    "package": "pnpm build && cd extension && vsce package --no-dependencies",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
     "concurrently": "^9.2.1"
   }
 }
