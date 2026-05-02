@@ -1,12 +1,25 @@
-import type { ConnectionConfig, ExtensionToWebviewMessage } from 'shared';
+import type {
+  ConnectionConfig,
+  DocumentConnectionNotification,
+  ExtensionToWebviewMessage,
+  SchemaClearNotification,
+  SchemaUpdateNotification,
+} from 'shared';
 import { ConnectionStore } from 'src/db/ConnectionStore';
 import * as vscode from 'vscode';
+import {
+  LanguageClient,
+  type LanguageClientOptions,
+  type ServerOptions,
+  TransportKind,
+} from 'vscode-languageclient/node';
 import { MessageBus } from './bridge/MessageBus';
 import { ConnectionManager } from './db/ConnectionManager';
 import { MainPanel } from './panels/MainPanel';
 import { SchemaTreeProvider } from './providers/SchemaTreeProvider';
 import { QuerySessionManager } from './query/QuerySessionManager';
 import { resolveExecutableSql } from './query/statement';
+import { SchemaMetadataManager } from './schema/SchemaMetadataManager';
 
 type QueryStateMessage = Extract<
   ExtensionToWebviewMessage,
@@ -16,8 +29,10 @@ type QueryStateMessage = Extract<
 const bus = new MessageBus();
 const connectionManager = new ConnectionManager();
 const querySessionManager = new QuerySessionManager();
+const schemaMetadataManager = new SchemaMetadataManager(connectionManager);
 let connectionStore: ConnectionStore;
 let latestQueryState: QueryStateMessage | undefined;
+let languageClient: LanguageClient | undefined;
 
 interface ConnectionCommandArgument {
   connection?: {
@@ -25,13 +40,18 @@ interface ConnectionCommandArgument {
   };
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   console.log('db-client extension activated');
+
+  languageClient = createLanguageClient(context);
+  context.subscriptions.push(languageClient);
+  await languageClient.start();
 
   connectionStore = new ConnectionStore(context.secrets);
   const schemaTreeProvider = new SchemaTreeProvider(
     connectionStore,
-    connectionManager
+    connectionManager,
+    schemaMetadataManager
   );
   const connectionsTreeView = vscode.window.createTreeView(
     'db-client.connections',
@@ -56,14 +76,26 @@ export function activate(context: vscode.ExtensionContext) {
     'db-client.executeQuery',
     () => executeActiveQuery(context)
   );
-
+  const refreshSchemaCommand = vscode.commands.registerCommand(
+    'db-client.refreshSchema',
+    (argument?: unknown) => refreshSchema(argument, schemaTreeProvider)
+  );
   context.subscriptions.push(
+    schemaMetadataManager.onDidRefresh((metadata) => {
+      sendSchemaUpdate(metadata.connectionId, metadata);
+    }),
     helloWorldCommand,
     openPanelCommand,
     newQueryCommand,
     executeQueryCommand,
+    refreshSchemaCommand,
     vscode.workspace.onDidCloseTextDocument((document) => {
+      const connectionId = querySessionManager.get(document.uri);
       querySessionManager.unbind(document.uri);
+
+      if (connectionId) {
+        sendDocumentConnection(document.uri, null);
+      }
     }),
     connectionsTreeView
   );
@@ -89,6 +121,8 @@ export function activate(context: vscode.ExtensionContext) {
     .on('DELETE_CONNECTION', async ({ connectionId }) => {
       await connectionStore.delete(connectionId);
       await connectionManager.disconnect(connectionId);
+      schemaMetadataManager.clear(connectionId);
+      sendSchemaClear(connectionId);
       schemaTreeProvider.refresh();
       bus.send({ type: 'CONNECTION_DELETED', payload: { connectionId } });
     })
@@ -99,6 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
           payload: { connectionId: config.id },
         });
         await connectionManager.connect(config);
+        await refreshMetadataAfterConnect(config);
         schemaTreeProvider.refresh();
         bus.send({
           type: 'CONNECTION_SUCCESS',
@@ -113,11 +148,14 @@ export function activate(context: vscode.ExtensionContext) {
     })
     .on('DISCONNECT', async ({ connectionId }) => {
       await connectionManager.disconnect(connectionId);
+      schemaMetadataManager.clear(connectionId);
+      sendSchemaClear(connectionId);
       schemaTreeProvider.refresh();
     });
 }
 
 export function deactivate() {
+  void languageClient?.stop();
   connectionManager.disconnectAll();
 }
 
@@ -133,8 +171,9 @@ async function openNewQuery(argument?: unknown): Promise<void> {
     content: `-- Connection: ${connection.name}\n\n`,
   });
 
-  querySessionManager.bind(document.uri, connection.id);
   await vscode.window.showTextDocument(document);
+  bindQueryDocument(document.uri, connection.id);
+  void ensureSchemaMetadata(connection);
 }
 
 async function executeActiveQuery(
@@ -173,7 +212,8 @@ async function executeActiveQuery(
     return;
   }
 
-  querySessionManager.bind(editor.document.uri, connection.id);
+  bindQueryDocument(editor.document.uri, connection.id);
+  void ensureSchemaMetadata(connection);
   await MainPanel.create(context, bus);
   sendQueryState({
     type: 'QUERY_RUNNING',
@@ -192,6 +232,33 @@ async function executeActiveQuery(
       type: 'QUERY_ERROR',
       payload: { message: getErrorMessage(error), queryId: '' },
     });
+  }
+}
+
+async function refreshSchema(
+  argument: unknown,
+  schemaTreeProvider: SchemaTreeProvider
+): Promise<void> {
+  const connection = await resolveConnection(argument);
+
+  if (!connection) {
+    return;
+  }
+
+  try {
+    if (!connectionManager.isConnected(connection.id)) {
+      await connectionManager.connect(connection);
+    }
+
+    await schemaMetadataManager.refresh(connection);
+    schemaTreeProvider.refresh();
+    await vscode.window.showInformationMessage(
+      `Schema refreshed for ${connection.name}.`
+    );
+  } catch (error: unknown) {
+    await vscode.window.showErrorMessage(
+      `Failed to refresh schema for ${connection.name}: ${getErrorMessage(error)}`
+    );
   }
 }
 
@@ -273,4 +340,98 @@ function getErrorMessage(error: unknown): string {
 function sendQueryState(message: QueryStateMessage): void {
   latestQueryState = message;
   bus.send(message);
+}
+
+async function refreshMetadataAfterConnect(
+  connection: ConnectionConfig
+): Promise<void> {
+  await ensureSchemaMetadata(connection);
+}
+
+async function ensureSchemaMetadata(
+  connection: ConnectionConfig
+): Promise<void> {
+  try {
+    if (!connectionManager.isConnected(connection.id)) {
+      await connectionManager.connect(connection);
+    }
+
+    await schemaMetadataManager.refresh(connection);
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.warn(
+      `[SchemaMetadataManager] Failed to introspect ${connection.id}: ${message}`
+    );
+    await vscode.window.showWarningMessage(
+      `Connected to ${connection.name}, but schema introspection failed: ${message}`
+    );
+  }
+}
+
+function createLanguageClient(
+  context: vscode.ExtensionContext
+): LanguageClient {
+  const serverModule = vscode.Uri.joinPath(
+    context.extensionUri,
+    'dist',
+    'lsp',
+    'server.js'
+  ).fsPath;
+  const serverOptions: ServerOptions = {
+    run: { module: serverModule, transport: TransportKind.ipc },
+    debug: { module: serverModule, transport: TransportKind.ipc },
+  };
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [
+      { scheme: 'untitled', language: 'sql' },
+      { language: 'sql' },
+    ],
+  };
+
+  return new LanguageClient(
+    'dbClientSqlLanguageServer',
+    'DB Client SQL Language Server',
+    serverOptions,
+    clientOptions
+  );
+}
+
+function bindQueryDocument(
+  documentUri: vscode.Uri,
+  connectionId: string
+): void {
+  querySessionManager.bind(documentUri, connectionId);
+  sendDocumentConnection(documentUri, connectionId);
+
+  const metadata = schemaMetadataManager.get(connectionId);
+
+  if (metadata) {
+    sendSchemaUpdate(connectionId, metadata);
+  }
+}
+
+function sendSchemaUpdate(
+  connectionId: string,
+  metadata: SchemaUpdateNotification['metadata']
+): void {
+  languageClient?.sendNotification('dbClient/schemaUpdate', {
+    connectionId,
+    metadata,
+  } satisfies SchemaUpdateNotification);
+}
+
+function sendSchemaClear(connectionId: string): void {
+  languageClient?.sendNotification('dbClient/schemaClear', {
+    connectionId,
+  } satisfies SchemaClearNotification);
+}
+
+function sendDocumentConnection(
+  documentUri: vscode.Uri,
+  connectionId: string | null
+): void {
+  languageClient?.sendNotification('dbClient/documentConnection', {
+    documentUri: documentUri.toString(),
+    connectionId,
+  } satisfies DocumentConnectionNotification);
 }

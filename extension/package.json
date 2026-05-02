@@ -7,7 +7,7 @@
     "vscode": "^1.113.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["onView:db-client.connections"],
+  "activationEvents": ["onView:db-client.connections", "onLanguage:sql"],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -47,6 +47,12 @@
         "title": "Execute Query",
         "category": "DB Client",
         "icon": "$(run)"
+      },
+      {
+        "command": "db-client.refreshSchema",
+        "title": "Refresh Schema",
+        "category": "DB Client",
+        "icon": "$(refresh)"
       }
     ],
     "keybindings": [
@@ -63,6 +69,11 @@
           "command": "db-client.newQuery",
           "when": "view == db-client.connections && viewItem == dbClient.connection",
           "group": "navigation@1"
+        },
+        {
+          "command": "db-client.refreshSchema",
+          "when": "view == db-client.connections && viewItem == dbClient.connection",
+          "group": "inline@2"
         }
       ],
       "editor/title": [

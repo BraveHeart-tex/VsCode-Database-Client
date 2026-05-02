@@ -1,15 +1,8 @@
-import type { ConnectionConfig, Row } from 'shared';
+import type { ConnectionConfig, SchemaMetadataColumn } from 'shared';
 import * as vscode from 'vscode';
 import type { ConnectionManager } from '../db/ConnectionManager';
 import type { ConnectionStore } from '../db/ConnectionStore';
-
-const LOAD_SCHEMA_SQL = `
-SELECT table_schema, table_name
-FROM information_schema.tables
-WHERE table_type = 'BASE TABLE'
-  AND table_schema NOT IN ('pg_catalog', 'information_schema')
-ORDER BY table_schema, table_name
-`;
+import type { SchemaMetadataManager } from '../schema/SchemaMetadataManager';
 
 type TreeNode =
   | ConnectionNode
@@ -17,17 +10,6 @@ type TreeNode =
   | TableNode
   | ColumnNode
   | MessageNode;
-
-interface ColumnMetadata {
-  name: string;
-  dataType: string;
-  udtName: string;
-  isNullable: boolean;
-  defaultValue: string | null;
-  ordinalPosition: number;
-  isPrimaryKey: boolean;
-  isForeignKey: boolean;
-}
 
 interface ConnectionNode {
   kind: 'connection';
@@ -38,14 +20,17 @@ interface SchemaNode {
   kind: 'schema';
   connectionId: string;
   schema: string;
-  tables: string[];
+  tableCount: number;
 }
 
 interface TableNode {
   kind: 'table';
   connectionId: string;
   schema: string;
-  table: string;
+  table: {
+    name: string;
+    columns: SchemaMetadataColumn[];
+  };
 }
 
 interface ColumnNode {
@@ -53,7 +38,7 @@ interface ColumnNode {
   connectionId: string;
   schema: string;
   table: string;
-  column: ColumnMetadata;
+  column: SchemaMetadataColumn;
 }
 
 interface MessageNode {
@@ -70,7 +55,8 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   constructor(
     private readonly connectionStore: ConnectionStore,
-    private readonly connectionManager: ConnectionManager
+    private readonly connectionManager: ConnectionManager,
+    private readonly schemaMetadataManager: SchemaMetadataManager
   ) {}
 
   refresh(): void {
@@ -95,14 +81,14 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
           element.schema,
           vscode.TreeItemCollapsibleState.Collapsed
         );
-        item.description = `${element.tables.length} tables`;
+        item.description = `${element.tableCount} tables`;
         item.contextValue = 'dbClient.schema';
         item.iconPath = vscode.ThemeIcon.Folder;
         return item;
       }
       case 'table': {
         const item = new vscode.TreeItem(
-          element.table,
+          element.table.name,
           vscode.TreeItemCollapsibleState.Collapsed
         );
         item.description = element.schema;
@@ -145,7 +131,16 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     }
 
     if (element.kind === 'schema') {
-      return element.tables.map((table) => ({
+      const metadata = this.schemaMetadataManager.get(element.connectionId);
+      const schema = metadata?.schemas.find(
+        (metadataSchema) => metadataSchema.name === element.schema
+      );
+
+      if (!schema) {
+        return [];
+      }
+
+      return schema.tables.map((table) => ({
         kind: 'table',
         connectionId: element.connectionId,
         schema: element.schema,
@@ -165,36 +160,19 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   ): Promise<TreeNode[]> {
     try {
       await this.ensureConnected(connection);
+      const metadata =
+        this.schemaMetadataManager.get(connection.id) ??
+        (await this.schemaMetadataManager.refresh(connection));
 
-      const result = await this.connectionManager.query(
-        connection.id,
-        LOAD_SCHEMA_SQL
-      );
-
-      const schemaMap = new Map<string, string[]>();
-
-      for (const row of result.rows) {
-        const schema = this.readString(row, 'table_schema');
-        const table = this.readString(row, 'table_name');
-
-        if (!schema || !table) {
-          continue;
-        }
-
-        const tables = schemaMap.get(schema) ?? [];
-        tables.push(table);
-        schemaMap.set(schema, tables);
-      }
-
-      if (schemaMap.size === 0) {
+      if (metadata.schemas.length === 0) {
         return [{ kind: 'message', label: 'No tables found' }];
       }
 
-      return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
+      return metadata.schemas.map((schema) => ({
         kind: 'schema',
         connectionId: connection.id,
-        schema,
-        tables,
+        schema: schema.name,
+        tableCount: schema.tables.length,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -213,131 +191,17 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     await this.connectionManager.connect(connection);
   }
 
-  private async getColumnChildren(table: TableNode): Promise<TreeNode[]> {
-    try {
-      const result = await this.connectionManager.query(
-        table.connectionId,
-        this.createLoadColumnsSql(table.schema, table.table)
-      );
-
-      return result.rows
-        .map((row) => this.readColumnMetadata(row))
-        .filter((column): column is ColumnMetadata => column !== undefined)
-        .map((column) => ({
-          kind: 'column',
-          connectionId: table.connectionId,
-          schema: table.schema,
-          table: table.table,
-          column,
-        }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      void vscode.window.showErrorMessage(
-        `Failed to load columns for ${table.schema}.${table.table}: ${message}`
-      );
-      return [];
-    }
+  private getColumnChildren(table: TableNode): TreeNode[] {
+    return table.table.columns.map((column) => ({
+      kind: 'column',
+      connectionId: table.connectionId,
+      schema: table.schema,
+      table: table.table.name,
+      column,
+    }));
   }
 
-  private createLoadColumnsSql(schema: string, table: string): string {
-    return `
-SELECT
-  columns.column_name,
-  columns.data_type,
-  columns.udt_name,
-  columns.is_nullable,
-  columns.column_default,
-  columns.ordinal_position,
-  EXISTS (
-    SELECT 1
-    FROM information_schema.table_constraints AS constraints
-    INNER JOIN information_schema.key_column_usage AS key_usage
-      ON constraints.constraint_name = key_usage.constraint_name
-      AND constraints.table_schema = key_usage.table_schema
-      AND constraints.table_name = key_usage.table_name
-    WHERE constraints.constraint_type = 'PRIMARY KEY'
-      AND key_usage.table_schema = columns.table_schema
-      AND key_usage.table_name = columns.table_name
-      AND key_usage.column_name = columns.column_name
-  ) AS is_primary_key,
-  EXISTS (
-    SELECT 1
-    FROM information_schema.table_constraints AS constraints
-    INNER JOIN information_schema.key_column_usage AS key_usage
-      ON constraints.constraint_name = key_usage.constraint_name
-      AND constraints.table_schema = key_usage.table_schema
-      AND constraints.table_name = key_usage.table_name
-    WHERE constraints.constraint_type = 'FOREIGN KEY'
-      AND key_usage.table_schema = columns.table_schema
-      AND key_usage.table_name = columns.table_name
-      AND key_usage.column_name = columns.column_name
-  ) AS is_foreign_key
-FROM information_schema.columns AS columns
-WHERE columns.table_schema = '${this.escapeSqlLiteral(schema)}'
-  AND columns.table_name = '${this.escapeSqlLiteral(table)}'
-ORDER BY columns.ordinal_position
-`;
-  }
-
-  private escapeSqlLiteral(value: string): string {
-    return value.replaceAll("'", "''");
-  }
-
-  private readColumnMetadata(row: Row): ColumnMetadata | undefined {
-    const name = this.readString(row, 'column_name');
-    const dataType = this.readString(row, 'data_type');
-    const udtName = this.readString(row, 'udt_name');
-    const isNullable = this.readString(row, 'is_nullable');
-    const defaultValue = this.readNullableString(row, 'column_default');
-    const ordinalPosition = this.readNumber(row, 'ordinal_position');
-    const isPrimaryKey = this.readBoolean(row, 'is_primary_key');
-    const isForeignKey = this.readBoolean(row, 'is_foreign_key');
-
-    if (
-      !name ||
-      !dataType ||
-      !udtName ||
-      !isNullable ||
-      ordinalPosition === undefined ||
-      isPrimaryKey === undefined ||
-      isForeignKey === undefined
-    ) {
-      return undefined;
-    }
-
-    return {
-      name,
-      dataType,
-      udtName,
-      isNullable: isNullable === 'YES',
-      defaultValue,
-      ordinalPosition,
-      isPrimaryKey,
-      isForeignKey,
-    };
-  }
-
-  private readString(row: Row, key: string): string | undefined {
-    const value = row[key];
-    return typeof value === 'string' ? value : undefined;
-  }
-
-  private readNullableString(row: Row, key: string): string | null {
-    const value = row[key];
-    return typeof value === 'string' ? value : null;
-  }
-
-  private readNumber(row: Row, key: string): number | undefined {
-    const value = row[key];
-    return typeof value === 'number' ? value : undefined;
-  }
-
-  private readBoolean(row: Row, key: string): boolean | undefined {
-    const value = row[key];
-    return typeof value === 'boolean' ? value : undefined;
-  }
-
-  private formatColumnLabel(column: ColumnMetadata): string {
+  private formatColumnLabel(column: SchemaMetadataColumn): string {
     const parts = [column.name, column.dataType];
 
     if (!column.isNullable) {
@@ -353,7 +217,7 @@ ORDER BY columns.ordinal_position
     return parts.join(' ');
   }
 
-  private formatColumnDescription(column: ColumnMetadata): string {
+  private formatColumnDescription(column: SchemaMetadataColumn): string {
     const badges: string[] = [`#${column.ordinalPosition}`];
 
     if (column.isPrimaryKey) {
@@ -385,7 +249,7 @@ ORDER BY columns.ordinal_position
     ].join('\n');
   }
 
-  private getColumnIconId(column: ColumnMetadata): string {
+  private getColumnIconId(column: SchemaMetadataColumn): string {
     if (column.isPrimaryKey) {
       return 'key';
     }
@@ -436,7 +300,7 @@ ORDER BY columns.ordinal_position
     return 'symbol-field';
   }
 
-  private isArrayType(column: ColumnMetadata): boolean {
+  private isArrayType(column: SchemaMetadataColumn): boolean {
     return (
       column.dataType.toLowerCase() === 'array' ||
       column.udtName.startsWith('_')
