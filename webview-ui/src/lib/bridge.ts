@@ -13,6 +13,9 @@ export interface VsCodeApi {
 
 declare global {
   function acquireVsCodeApi(): VsCodeApi;
+
+  var dbClientBridge: WebviewBridge | undefined;
+  var dbClientVsCodeApi: VsCodeApi | undefined;
 }
 
 type MessageHandler<T extends ExtensionToWebviewMessage["type"]> = (
@@ -51,4 +54,11 @@ export class WebviewBridge {
 
 export function createWebviewBridge(vscode: VsCodeApi) {
   return new WebviewBridge(vscode);
+}
+
+export function getWebviewBridge() {
+  globalThis.dbClientVsCodeApi ??= acquireVsCodeApi();
+  globalThis.dbClientBridge ??= createWebviewBridge(globalThis.dbClientVsCodeApi);
+
+  return globalThis.dbClientBridge;
 }

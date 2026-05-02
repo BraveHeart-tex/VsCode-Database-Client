@@ -1,23 +1,41 @@
 <script lang="ts">
   import { setContext } from 'svelte';
+  import { onMount } from 'svelte';
   import ConnectionForm from './components/ConnectionForm.svelte';
   import QueryView from './components/QueryView.svelte';
   import {
     BRIDGE_CONTEXT_KEY,
-    createWebviewBridge,
+    getWebviewBridge,
   } from './lib/bridge';
 
   type View = 'connections' | 'query';
 
-  const bridge = createWebviewBridge(acquireVsCodeApi());
+  const bridge = getWebviewBridge();
   setContext(BRIDGE_CONTEXT_KEY, bridge);
 
   let view = $state<View>('connections');
+  let activeConnectionIds = $state<string[]>([]);
 
   const tabs: { id: View; label: string }[] = [
     { id: 'connections', label: 'Connections' },
     { id: 'query', label: 'Query' },
   ];
+
+  onMount(() => {
+    const offSuccess = bridge.on('CONNECTION_SUCCESS', ({ connectionId }) => {
+      if (!activeConnectionIds.includes(connectionId)) {
+        activeConnectionIds = [...activeConnectionIds, connectionId];
+      }
+    });
+    const offDeleted = bridge.on('CONNECTION_DELETED', ({ connectionId }) => {
+      activeConnectionIds = activeConnectionIds.filter((id) => id !== connectionId);
+    });
+
+    return () => {
+      offSuccess();
+      offDeleted();
+    };
+  });
 </script>
 
 <main class="app-shell">
@@ -39,7 +57,12 @@
   {#if view === 'connections'}
     <ConnectionForm />
   {:else}
-    <QueryView />
+    <QueryView
+      {activeConnectionIds}
+      onOpenConnections={() => {
+        view = 'connections';
+      }}
+    />
   {/if}
 </main>
 

@@ -90,6 +90,9 @@ importers:
 
   webview-ui:
     dependencies:
+      '@tanstack/table-core':
+        specifier: ^8.21.3
+        version: 8.21.3
       '@tanstack/svelte-table':
         specifier: ^8.21.3
         version: 8.21.3(svelte@5.55.5(@typescript-eslint/types@8.59.1))

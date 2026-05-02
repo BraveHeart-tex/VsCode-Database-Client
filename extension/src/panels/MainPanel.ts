@@ -3,6 +3,7 @@ import type { MessageBus } from '../bridge/MessageBus';
 
 const VIEW_TYPE = 'db-client.mainPanel';
 const WEBVIEW_DIR = 'webview';
+const DEFAULT_DEV_SERVER = 'http://127.0.0.1:5173';
 
 export class MainPanel {
   private static currentPanel: MainPanel | null = null;
@@ -40,6 +41,53 @@ export class MainPanel {
   }
 
   private async getHtml() {
+    if (this.context.extensionMode === vscode.ExtensionMode.Development) {
+      return this.getDevHtml();
+    }
+
+    return this.getProductionHtml();
+  }
+
+  private async getDevHtml() {
+    const nonce = getNonce();
+    const configuredDevServer =
+      process.env.DB_CLIENT_WEBVIEW_DEV_SERVER ?? DEFAULT_DEV_SERVER;
+    const devServerUri = await vscode.env.asExternalUri(
+      vscode.Uri.parse(configuredDevServer)
+    );
+    const devServer = devServerUri.toString().replace(/\/$/, '');
+    const devServerOrigin = getOrigin(devServer);
+    const devServerWebSocketOrigin = toWebSocketOrigin(devServerOrigin);
+    const csp = [
+      "default-src 'none'",
+      `img-src ${this.panel.webview.cspSource} ${devServerOrigin} data: blob:`,
+      `style-src ${this.panel.webview.cspSource} ${devServerOrigin} 'unsafe-inline'`,
+      `script-src 'nonce-${nonce}' ${devServerOrigin} 'unsafe-inline' 'unsafe-eval'`,
+      `connect-src ${devServerOrigin} ${devServerWebSocketOrigin} ws://localhost:5173 ws://127.0.0.1:5173`,
+      `font-src ${devServerOrigin}`,
+    ].join('; ');
+
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DB Client</title>
+    <script type="module" nonce="${nonce}" src="${devServer}/@vite/client"></script>
+    <script type="module" nonce="${nonce}" src="${devServer}/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div style="font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 24px;">
+        Loading DB Client from ${escapeHtml(devServer)}...
+      </div>
+    </div>
+  </body>
+</html>`;
+  }
+
+  private async getProductionHtml() {
     const webviewRoot = vscode.Uri.joinPath(
       this.context.extensionUri,
       'dist',
@@ -88,6 +136,30 @@ export class MainPanel {
 
 function isLocalAsset(value: string) {
   return !/^(?:[a-z]+:|#|data:)/i.test(value);
+}
+
+function getOrigin(uri: string) {
+  return new URL(uri).origin;
+}
+
+function toWebSocketOrigin(origin: string) {
+  const url = new URL(origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.origin;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[char] ?? char
+  );
 }
 
 function getNonce() {

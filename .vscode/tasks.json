@@ -1,51 +1,100 @@
 // See https://go.microsoft.com/fwlink/?LinkId=733558
 // for the documentation about the tasks.json format
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "watch",
-			"type": "shell",
-			"command": "node",
-			"args": [
-				"esbuild.js",
-				"--watch"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}/extension"
-			},
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
-			"problemMatcher": {
-				"owner": "esbuild",
-				"fileLocation": [
-					"relative",
-					"${workspaceFolder}/extension"
-				],
-				"pattern": [
-					{
-						"regexp": "^\\u2718 \\[ERROR\\] (.*)$",
-						"message": 1
-					},
-					{
-						"regexp": "^\\s+(.*):(\\d+):(\\d+):$",
-						"file": 1,
-						"line": 2,
-						"column": 3
-					}
-				],
-				"background": {
-					"activeOnStart": true,
-					"beginsPattern": "^\\[watch\\] build started$",
-					"endsPattern": "^\\[watch\\] build finished$"
-				}
-			},
-			"isBackground": true,
-			"presentation": {
-				"reveal": "never"
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "watch:extension",
+      "type": "shell",
+      "command": "fnm",
+      "args": ["exec", "--using", "22", "node", "esbuild.js", "--watch"],
+      "options": {
+        "cwd": "${workspaceFolder}/extension"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": ["relative", "${workspaceFolder}/extension"],
+        "pattern": [
+          {
+            "regexp": "^\\u2718 \\[ERROR\\] (.*)$",
+            "message": 1
+          },
+          {
+            "regexp": "^\\s+(.*):(\\d+):(\\d+):$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started$",
+          "endsPattern": "^\\[watch\\] build finished$"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "watch:webview",
+      "type": "shell",
+      "command": "fnm",
+      "args": [
+        "exec",
+        "--using",
+        "22",
+        "pnpm",
+        "-C",
+        "webview-ui",
+        "exec",
+        "vite",
+        "dev",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": [
+          {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*VITE.*",
+          "endsPattern": "^\\s+➜\\s+Local:\\s+http://127\\.0\\.0\\.1:5173/"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "watch",
+      "dependsOn": ["watch:extension", "watch:webview"],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
 }

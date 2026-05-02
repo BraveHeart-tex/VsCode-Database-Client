@@ -4,17 +4,16 @@
     ColumnDef,
     Header,
     TableOptions,
-  } from '@tanstack/svelte-table';
+    TableOptionsResolved,
+  } from '@tanstack/table-core';
   import {
     createColumnHelper,
-    createSvelteTable,
-    flexRender,
+    createTable,
     getCoreRowModel,
-  } from '@tanstack/svelte-table';
+  } from '@tanstack/table-core';
   import { createVirtualizer } from '@tanstack/svelte-virtual';
   import type { Column, ExtensionToWebviewMessage, Row } from 'shared';
   import { getContext } from 'svelte';
-  import { writable } from 'svelte/store';
   import {
     BRIDGE_CONTEXT_KEY,
     type WebviewBridge,
@@ -51,8 +50,6 @@
   let errorMessage = $state<string | null>(null);
   let scrollElement = $state<HTMLDivElement | null>(null);
 
-  const tableOptions = writable<TableOptions<Row>>(createTableOptions([], []));
-  const table = createSvelteTable(tableOptions);
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: 0,
     getScrollElement: () => scrollElement,
@@ -60,9 +57,10 @@
     overscan: 8,
   });
 
+  const table = $derived(createTable(createTableOptions(currentRows, currentColumns)));
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
-  const tableRows = $derived($table.getRowModel().rows);
+  const tableRows = $derived(table.getRowModel().rows);
 
   $effect(() => {
     currentRows = rows;
@@ -77,7 +75,6 @@
   });
 
   $effect(() => {
-    tableOptions.set(createTableOptions(currentRows, currentColumns));
     $virtualizer.setOptions({ count: currentRows.length });
   });
 
@@ -109,7 +106,7 @@
   function createTableOptions(
     data: Row[],
     resultColumns: Column[]
-  ): TableOptions<Row> {
+  ): TableOptionsResolved<Row> {
     return {
       data,
       columns: resultColumns.map((column) =>
@@ -120,6 +117,9 @@
         })
       ),
       getCoreRowModel: getCoreRowModel(),
+      onStateChange: () => {},
+      renderFallbackValue: null,
+      state: {},
     };
   }
 
@@ -149,7 +149,7 @@
   }
 
   function renderCell(cell: Cell<Row, unknown>) {
-    return flexRender(cell.column.columnDef.cell, cell.getContext());
+    return formatCellValue(cell.getValue());
   }
 </script>
 
@@ -176,7 +176,7 @@
     <div class="table-wrap" bind:this={scrollElement}>
       <div class="table" style:width={`${Math.max(currentColumns.length, 1) * 180}px`}>
         <div class="thead">
-          {#each $table.getHeaderGroups() as headerGroup (headerGroup.id)}
+          {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
             <div class="tr">
               {#each headerGroup.headers as header (header.id)}
                 {@const column = headerColumn(header)}
@@ -199,11 +199,8 @@
                 style:transform={`translateY(${virtualRow.start}px)`}
               >
                 {#each row.getVisibleCells() as cell (cell.id)}
-                  {@const CellComponent = renderCell(cell)}
                   <div class="td">
-                    {#if CellComponent}
-                      <CellComponent />
-                    {/if}
+                    {renderCell(cell)}
                   </div>
                 {/each}
               </div>
